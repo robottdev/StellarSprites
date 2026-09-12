@@ -4,6 +4,7 @@ import {
   randomizePlanet, randomizeSun, randomizeMoon, randomizeAsteroid, randomizeBlackhole, randomizeBackground,
 } from "./celestial.js";
 import { generateShip, generateStation, randomizeShip, randomizeStation } from "./craft.js";
+import { generateSolarSystem, randomizeScene } from "./scene.js";
 
 function reviveColor(c) {
   if (!c) return Color.white.clone();
@@ -22,6 +23,7 @@ export function reviveParams(type, params) {
   if (p.tint) p.tint = reviveColor(p.tint);
   if (p.mineralColor) p.mineralColor = reviveColor(p.mineralColor);
   if (p.oceanColor) p.oceanColor = reviveColor(p.oceanColor);
+  if (p.starColor) p.starColor = reviveColor(p.starColor);
   if (p.availableColors) p.availableColors = reviveColors(p.availableColors);
   if (p.availableMineralColors) p.availableMineralColors = reviveColors(p.availableMineralColors);
   return p;
@@ -38,6 +40,7 @@ export function randomize(type, state) {
     case "station": return randomizeStation(s);
     case "blackhole": return randomizeBlackhole(s);
     case "background": return randomizeBackground(s);
+    case "scene": return randomizeScene(s);
     default: return s;
   }
 }
@@ -65,6 +68,14 @@ export function generateSprite(type, rawParams) {
       width: params.size,
       height: params.size,
     });
+  } else if (type === "scene") {
+    const result = generateSolarSystem(params);
+    return {
+      width: result.texture.width,
+      height: result.texture.height,
+      pixels: result.texture.toRgbaBytes(),
+      scene: result.scene,
+    };
   } else {
     throw new Error("Unknown generator: " + type);
   }

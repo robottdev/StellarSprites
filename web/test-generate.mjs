@@ -24,6 +24,7 @@ const jobs = [
   ["station", "station", { seed: 13, colors: [Color.grey, Color.cyan], colorDetail: 0.02, numberOfPods: 6 }],
   ["blackhole", "blackhole", { seed: 1 }],
   ["background", "background", { seed: 21, size: 64, frequency: 0.04, lacunarity: 2, persistence: 0.5, octaves: 4, starCount: 40, tint: Color.blue, brightness: 0.6 }],
+  ["scene", "scene", { seed: 3, planetCount: 3, belt: true, station: true, blackHole: false, quality: 0, starColor: Color.yellow }],
 ];
 
 for (const [name, type, params] of jobs) {
@@ -34,6 +35,11 @@ for (const [name, type, params] of jobs) {
   console.log(`${name}: ${result.width}x${result.height} coverage=${cov.toFixed(3)} ${dt}ms`);
   assert(result.width > 0 && result.height > 0, name + " empty size");
   assert(cov > 0.01, name + " looks empty");
+  if (type === "scene") {
+    assert(result.scene && result.scene.planets.length >= 3, "scene missing planets");
+    assert(result.scene.sprites.length > 4, "scene missing sprites");
+    assert(result.scene.sun && result.scene.player, "scene missing star or ship");
+  }
 }
 
 console.log("ok");
