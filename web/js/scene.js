@@ -147,9 +147,9 @@ export function generateSolarSystem(params) {
     lacunarity: 2.1,
     persistence: 0.48,
     octaves: quality < 0.5 ? 3 : 5,
-    starCount: quality < 0.5 ? 40 : 160,
-    tint: mixColor(starColor, new Color(0.2, 0.28, 0.55, 1), 0.55),
-    brightness: 0.55,
+    starCount: quality < 0.5 ? 40 : 220,
+    tint: mixColor(starColor, new Color(0.16, 0.22, 0.48, 1), 0.62),
+    brightness: 0.42,
   });
   const bgSprite = pushSprite(bgTex);
 

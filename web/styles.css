@@ -317,7 +317,13 @@ input[type="range"] { width: 100%; }
   color: var(--muted);
 }
 
-.fly-readout { color: var(--accent); }
+.fly-readout {
+  color: var(--accent);
+  max-width: min(46vw, 420px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 #fly-minimap {
   position: absolute;
