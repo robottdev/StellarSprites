@@ -3,7 +3,10 @@ import {
   unityRandomInt, unityRandomFloat,
 } from "./core.js";
 import { fillPolygon, drawPolygon, fillRect, fillDisc, drawLine } from "./raster.js";
-import { stampGlow } from "./lighting.js";
+import {
+  n01, makeLight, lambert, specular, rimLight, perturbNormal, shadeRgb, stampGlow,
+} from "./lighting.js";
+import { Perlin, QualityMode } from "./libnoise.js";
 
 export const ShipType = { Fighter: 0, Fighter2: 1, Hauler: 2, Saucer: 3 };
 
@@ -380,6 +383,116 @@ function cleftForEngine(kind, midW) {
   return { w: 20, h: 20 };
 }
 
+function nearClear(tex, x, y, rad) {
+  for (let d = 1; d <= rad; d++) {
+    if (
+      tex.isClear(x - d, y) || tex.isClear(x + d, y) ||
+      tex.isClear(x, y - d) || tex.isClear(x, y + d)
+    ) {
+      return (rad + 1 - d) / rad;
+    }
+  }
+  return 0;
+}
+
+function nearInk(tex, x, y) {
+  for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    const j = tex.index(x + ox, y + oy);
+    if (!tex.inBounds(x + ox, y + oy)) continue;
+    if (tex.data[j + 3] < 0.05) continue;
+    if (tex.data[j] < 0.22 && tex.data[j + 1] < 0.22 && tex.data[j + 2] < 0.22) return true;
+  }
+  return false;
+}
+
+/** Planet-style lighting + metal grain on the already-drawn silhouette. */
+function shadeShip(tex, opts) {
+  const { seed, cx, yNose, yStern, midW, span, profile, colorDetail } = opts;
+  const grain = new Perlin(0.072, 2.05, 0.48, 3, seed + 17, QualityMode.Low);
+  const fine = new Perlin(0.16, 2.1, 0.42, 2, seed + 41, QualityMode.Low);
+  const broad = new Perlin(0.016, 2.0, 0.5, 3, seed + 7, QualityMode.Low);
+  const light = makeLight(180, 0.62);
+  const texAmt = clamp(0.05 + colorDetail * 0.85, 0.05, 0.22);
+  const len = Math.max(8, yStern - yNose);
+  const out = new Float32Array(tex.data);
+  const w = tex.width;
+  const h = tex.height;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (x + y * w) * 4;
+      if (tex.data[i + 3] < 0.05) continue;
+      const r = tex.data[i];
+      const g = tex.data[i + 1];
+      const b = tex.data[i + 2];
+      if (r < 0.22 && g < 0.22 && b < 0.22) continue;
+
+      const dx = x - cx;
+      const t = clamp01((y - yNose) / len);
+      const hullW = Math.max(3, widthAt(profile, t, midW));
+      const onHull = Math.abs(dx) <= hullW + 0.85;
+
+      let nx;
+      let ny;
+      let nz;
+      if (onHull) {
+        const u = clamp(dx / hullW, -1, 1);
+        const z = Math.sqrt(Math.max(0.04, 1 - u * u));
+        nx = u * 0.95;
+        ny = 0.1;
+        nz = 0.35 + 0.65 * z;
+      } else {
+        const wingT = clamp01((Math.abs(dx) - hullW) / Math.max(12, span));
+        nx = Math.sign(dx || 1) * (0.16 + 0.5 * wingT);
+        ny = 0.2;
+        nz = 0.92 - 0.38 * wingT;
+      }
+      const nlen = Math.hypot(nx, ny, nz) || 1;
+      const n0 = { nx: nx / nlen, ny: ny / nlen, nz: nz / nlen, r2: 0 };
+
+      const g1 = n01(grain, x, y, 0);
+      const g2 = n01(fine, x, y, 0);
+      const gLow = n01(broad, x, y, 0);
+      const bump = (g1 - 0.5) * 0.32 + (gLow - 0.5) * (onHull ? 0.16 : 0.06);
+      const n = perturbNormal(n0, bump, bump * 0.35, 0.65);
+
+      let lightAmt = lambert(n, light, 0.14, 0.16);
+      if (onHull) {
+        const ridge = Math.pow(Math.max(0, 1 - Math.abs(dx) / hullW), 1.6);
+        lightAmt += ridge * 0.1;
+      }
+      const spec = specular(n, light, onHull ? 26 : 48, onHull ? 0.32 : 0.11);
+      const rim = rimLight(n, light, 3.2) * 0.18;
+      const grainMul = 1 + (g2 - 0.5) * texAmt * 0.85 + (gLow - 0.5) * texAmt * 0.28;
+
+      let ao = nearClear(tex, x, y, 3) * 0.4;
+      if (!onHull && Math.abs(dx) < hullW + 7) {
+        ao = Math.max(ao, (1 - clamp01((Math.abs(dx) - hullW) / 7)) * 0.28);
+      }
+      if (nearInk(tex, x, y)) ao = Math.max(ao, 0.22);
+
+      const shade = clamp(lightAmt * grainMul * (1 - ao), 0.22, 1.35);
+      const emissive = g > 0.48 && b > 0.48 && r < g * 0.9;
+      let lit;
+      if (emissive) {
+        const k = 0.78 + 0.28 * lightAmt;
+        lit = new Color(
+          clamp01(r * k),
+          clamp01(g * k + spec * 0.12),
+          clamp01(b * k + spec * 0.18),
+          1
+        );
+      } else {
+        lit = shadeRgb(new Color(r, g, b, 1), shade, rim, spec * (0.55 + 0.45 * g2));
+      }
+      out[i] = lit.r;
+      out[i + 1] = lit.g;
+      out[i + 2] = lit.b;
+    }
+  }
+  tex.data.set(out);
+}
+
 export function generateShip(params) {
   const { seed, shipType, bodyDetail, wingDetail, colors, colorDetail } = params;
   const width = 256;
@@ -474,6 +587,7 @@ export function generateShip(params) {
   placeEngines(tex, engineKind, cx, yBay, yStern, midW, glow, tips);
   const weaponPts = placeWeapons(tex, weaponKind, cx, yNose, tips, shell);
 
+  shadeShip(tex, { seed, cx, yNose, yStern, midW, span, profile, colorDetail: colorDetail || 0.08 });
   outline(tex, INK);
   for (const g of glow) {
     stampGlow(tex, g.x, g.y + 2, g.r * 1.5, new Color(0.18, 0.82, 0.92, 0.26));
