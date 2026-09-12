@@ -1,19 +1,14 @@
 import {
-  Color, SpriteTexture, SS_Random, clamp, clamp01, mixColor, outline,
+  Color, SpriteTexture, SS_Random, clamp, clamp01, mixColor, hash2,
   unityRandomInt, unityRandomFloat,
 } from "./core.js";
-import { fillPolygon, drawPolygon, fillRect, fillDisc, drawLine } from "./raster.js";
+import { fillPolygon, fillRect, fillDisc, fillEllipse, drawLine } from "./raster.js";
 import {
-  n01, makeLight, lambert, specular, rimLight, perturbNormal, shadeRgb, stampGlow,
+  n01, makeLight, lambert, specular, rimLight, perturbNormal, stampGlow, heatColor,
 } from "./lighting.js";
 import { Perlin, QualityMode } from "./libnoise.js";
 
 export const ShipType = { Fighter: 0, Fighter2: 1, Hauler: 2, Saucer: 3 };
-
-const INK = new Color(0.08, 0.09, 0.11, 1);
-const ENGINE = new Color(0.18, 0.86, 0.92, 1);
-const ENGINE_HI = new Color(0.78, 0.98, 1, 1);
-const ENGINE_CORE = new Color(0.06, 0.32, 0.38, 1);
 
 const HULL_PROFILES = [
   [
@@ -216,141 +211,127 @@ function innerWing(pts) {
   ];
 }
 
-function paintWings(tex, pieces, fill, panel, ink) {
+function seam(tex, a, b, color) {
+  drawLine(tex, a.x, a.y, b.x, b.y, color, 1);
+}
+
+function paintWings(tex, pieces, fill, panel, seamCol) {
   for (const w of pieces) fillPolygon(tex, w.pts, fill);
   for (const w of pieces) {
     const [rootLead, tip, trailTip, rootTrail] = w.pts;
-    const lead = [
+    fillPolygon(tex, [
       rootLead,
       tip,
-      lerpPt(tip, trailTip, 0.10),
-      lerpPt(rootLead, rootTrail, 0.14),
-    ];
-    fillPolygon(tex, lead, mixColor(fill, ink, 0.12));
+      lerpPt(tip, trailTip, 0.08),
+      lerpPt(rootLead, rootTrail, 0.12),
+    ], mixColor(fill, new Color(0.22, 0.23, 0.25, 1), 0.18));
   }
   for (const w of pieces) {
-    fillPolygon(tex, innerWing(w.pts), panel);
-    drawPolygon(tex, innerWing(w.pts), ink, 1);
+    fillPolygon(tex, innerWing(w.pts), mixColor(fill, panel, 0.28));
   }
   for (const w of pieces) {
     if (w.cargo) {
       const [a, b, c, d] = w.pts;
-      drawLine(tex, lerpPt(a, d, 0.33).x, lerpPt(a, d, 0.33).y, lerpPt(b, c, 0.33).x, lerpPt(b, c, 0.33).y, ink, 1);
-      drawLine(tex, lerpPt(a, d, 0.66).x, lerpPt(a, d, 0.66).y, lerpPt(b, c, 0.66).x, lerpPt(b, c, 0.66).y, ink, 1);
+      seam(tex, lerpPt(a, d, 0.33), lerpPt(b, c, 0.33), seamCol);
+      seam(tex, lerpPt(a, d, 0.66), lerpPt(b, c, 0.66), seamCol);
     } else {
       const [rootLead, tip, trailTip, rootTrail] = w.pts;
-      drawLine(tex, lerpPt(rootLead, rootTrail, 0.55).x, lerpPt(rootLead, rootTrail, 0.55).y, lerpPt(tip, trailTip, 0.45).x, lerpPt(tip, trailTip, 0.45).y, ink, 1);
+      seam(tex, lerpPt(rootLead, rootTrail, 0.55), lerpPt(tip, trailTip, 0.45), seamCol);
       const flap = [
         lerpPt(rootTrail, trailTip, 0.22),
         lerpPt(rootTrail, trailTip, 0.78),
         lerpPt(lerpPt(rootTrail, trailTip, 0.78), lerpPt(rootLead, tip, 0.78), 0.16),
         lerpPt(lerpPt(rootTrail, trailTip, 0.22), lerpPt(rootLead, tip, 0.22), 0.16),
       ];
-      fillPolygon(tex, flap, mixColor(fill, panel, 0.35));
-      drawPolygon(tex, flap, ink, 1);
+      fillPolygon(tex, flap, mixColor(fill, panel, 0.4));
     }
   }
-  for (const w of pieces) drawPolygon(tex, w.pts, ink, 1);
 }
 
-function paintHull(tex, bands, shell, panel, ink) {
+function paintHull(tex, bands, shell, panel, seamCol) {
   bands.forEach((b, i) => {
-    const fill = i % 2 === 0 ? shell : mixColor(shell, panel, 0.22);
-    fillPolygon(tex, b.pts, fill);
+    fillPolygon(tex, b.pts, i % 2 === 0 ? shell : mixColor(shell, panel, 0.18));
   });
   bands.forEach((b, i) => {
     if (b.notch) return;
-    fillPolygon(tex, inset(b.pts, 3.2), i % 2 === 0 ? panel : mixColor(panel, shell, 0.2));
+    fillPolygon(tex, inset(b.pts, 3.4), i % 2 === 0 ? panel : mixColor(panel, shell, 0.25));
   });
-  for (const b of bands) drawPolygon(tex, b.pts, ink, 1);
+  for (const b of bands) {
+    const pts = b.pts;
+    for (let i = 0; i < pts.length; i++) seam(tex, pts[i], pts[(i + 1) % pts.length], seamCol);
+  }
 }
 
 function chevron(tex, cx, y, w, h, color) {
-  const pts = [
+  fillPolygon(tex, [
     { x: cx, y },
     { x: cx - w, y: y + h },
     { x: cx - w * 0.32, y: y + h },
     { x: cx, y: y + h * 0.38 },
     { x: cx + w * 0.32, y: y + h },
     { x: cx + w, y: y + h },
-  ];
-  fillPolygon(tex, pts, color);
-  drawPolygon(tex, pts, INK, 1);
+  ], color);
 }
 
-function ventralDiamond(tex, cx, y, w, h) {
+function radiator(tex, cx, y, w, h, metal) {
   const pts = [
     { x: cx, y },
     { x: cx + w, y: y + h * 0.42 },
     { x: cx, y: y + h },
     { x: cx - w, y: y + h * 0.42 },
   ];
-  fillPolygon(tex, pts, ENGINE);
-  fillPolygon(tex, inset(pts, 2.2), ENGINE_HI);
-  drawPolygon(tex, pts, INK, 1);
+  fillPolygon(tex, pts, mixColor(metal, new Color(0.3, 0.32, 0.34, 1), 0.35));
+  fillPolygon(tex, inset(pts, 2.4), mixColor(metal, new Color(0.26, 0.28, 0.3, 1), 0.4));
 }
 
 function cockpit(tex, cx, y, w, h, glass) {
-  const pts = [
+  fillPolygon(tex, [
     { x: cx, y },
     { x: cx + w, y: y + h * 0.48 },
     { x: cx, y: y + h },
     { x: cx - w, y: y + h * 0.48 },
-  ];
-  fillPolygon(tex, pts, glass);
-  drawPolygon(tex, pts, INK, 1);
+  ], glass);
 }
 
-function engineNozzle(tex, cx, yTop, w, h, glow) {
-  const pts = [
-    { x: cx - w * 0.5, y: yTop },
-    { x: cx + w * 0.5, y: yTop },
-    { x: cx + w * 0.36, y: yTop + h },
-    { x: cx - w * 0.36, y: yTop + h },
-  ];
-  fillPolygon(tex, pts, ENGINE);
-  fillPolygon(tex, inset(pts, 2.2), ENGINE_HI);
-  fillRect(tex, cx - w * 0.16, yTop + h - 5, Math.max(2, w * 0.32), 4, ENGINE_CORE);
-  drawPolygon(tex, pts, INK, 1);
-  glow.push({ x: cx, y: yTop + h - 1, r: w * 0.75 });
+function engineBell(tex, cx, cy, rx, ry, glow) {
+  const ceramic = new Color(0.16, 0.15, 0.14, 1);
+  const soot = new Color(0.07, 0.07, 0.08, 1);
+  fillEllipse(tex, cx, cy, rx, ry, ceramic);
+  fillEllipse(tex, cx, cy, rx * 0.78, ry * 0.78, soot);
+  fillEllipse(tex, cx, cy, rx * 0.48, ry * 0.48, new Color(0.55, 0.28, 0.08, 1));
+  fillEllipse(tex, cx, cy, rx * 0.28, ry * 0.28, new Color(1, 0.82, 0.45, 1));
+  fillEllipse(tex, cx, cy, rx * 0.14, ry * 0.14, new Color(0.85, 0.95, 1, 1));
+  glow.push({ x: cx, y: cy + ry * 0.15, r: Math.max(rx, ry) * 1.15 });
 }
 
 function placeEngines(tex, kind, cx, yBay, yStern, midW, glow, tips) {
-  const h = Math.max(14, yStern - yBay + 8);
+  const y = yBay + Math.max(8, (yStern - yBay) * 0.55);
   if (kind === 0) {
-    engineNozzle(tex, cx - 10, yBay, 13, h, glow);
-    engineNozzle(tex, cx + 10, yBay, 13, h, glow);
+    engineBell(tex, cx - 11, y, 8, 10, glow);
+    engineBell(tex, cx + 11, y, 8, 10, glow);
   } else if (kind === 1) {
-    engineNozzle(tex, cx, yBay - 1, 15, h + 2, glow);
-    engineNozzle(tex, cx - 15, yBay + 4, 10, h - 2, glow);
-    engineNozzle(tex, cx + 15, yBay + 4, 10, h - 2, glow);
+    engineBell(tex, cx, y, 9, 11, glow);
+    engineBell(tex, cx - 16, y + 3, 6.5, 8, glow);
+    engineBell(tex, cx + 16, y + 3, 6.5, 8, glow);
   } else if (kind === 2) {
-    engineNozzle(tex, cx, yBay, Math.max(26, midW * 1.2), h - 1, glow);
+    engineBell(tex, cx, y, Math.max(14, midW * 0.7), 9, glow);
   } else if (kind === 3) {
-    engineNozzle(tex, cx - 17, yBay + 1, 11, h - 1, glow);
-    engineNozzle(tex, cx + 17, yBay + 1, 11, h - 1, glow);
-    engineNozzle(tex, cx - 6, yBay + 4, 9, h - 3, glow);
-    engineNozzle(tex, cx + 6, yBay + 4, 9, h - 3, glow);
+    engineBell(tex, cx - 17, y, 6.5, 8, glow);
+    engineBell(tex, cx + 17, y, 6.5, 8, glow);
+    engineBell(tex, cx - 6, y + 3, 5.5, 7, glow);
+    engineBell(tex, cx + 6, y + 3, 5.5, 7, glow);
   } else {
-    engineNozzle(tex, cx, yBay + 2, 12, h - 2, glow);
+    engineBell(tex, cx, y + 2, 7, 8, glow);
     for (const tip of tips) {
-      const x = (tip.xRoot + tip.x) * 0.5;
-      engineNozzle(tex, x, tip.yTrail - 4, 10, 14, glow);
+      engineBell(tex, (tip.xRoot + tip.x) * 0.5, tip.yTrail - 2, 6, 7, glow);
     }
   }
 }
 
 function gunBarrel(tex, x, y, len, fill) {
-  fillDisc(tex, x, y, 3.1, fill);
-  const w = 2.6;
-  const pts = [
-    { x: x - w, y },
-    { x: x + w, y },
-    { x: x + w * 0.55, y: y - len },
-    { x: x - w * 0.55, y: y - len },
-  ];
-  fillPolygon(tex, pts, fill);
-  drawPolygon(tex, pts, INK, 1);
+  fillDisc(tex, x, y, 3.2, mixColor(fill, new Color(0.18, 0.18, 0.2, 1), 0.35));
+  fillRect(tex, x - 1.6, y - len, 3.2, len, mixColor(fill, new Color(0.2, 0.2, 0.22, 1), 0.25));
+  fillRect(tex, x - 0.7, y - len - 1, 1.4, 4, new Color(0.08, 0.08, 0.09, 1));
 }
 
 function placeWeapons(tex, kind, cx, yNose, tips, fill) {
@@ -358,18 +339,18 @@ function placeWeapons(tex, kind, cx, yNose, tips, fill) {
   if (kind === 4) return pts;
   if ((kind === 0 || kind === 3) && tips.length) {
     for (const tip of tips) {
-      gunBarrel(tex, tip.x, tip.y + 3, 17, fill);
+      gunBarrel(tex, tip.x, tip.y + 3, 16, fill);
       pts.push({ x: tip.x - cx, y: tip.y });
     }
   }
   if (kind === 1 || kind === 3) {
-    gunBarrel(tex, cx - 5, yNose + 10, 17, fill);
-    gunBarrel(tex, cx + 5, yNose + 10, 17, fill);
+    gunBarrel(tex, cx - 5, yNose + 10, 16, fill);
+    gunBarrel(tex, cx + 5, yNose + 10, 16, fill);
     pts.push({ x: 0, y: yNose });
   }
   if (kind === 2) {
-    gunBarrel(tex, cx - 18, yNose + 38, 15, fill);
-    gunBarrel(tex, cx + 18, yNose + 38, 15, fill);
+    gunBarrel(tex, cx - 18, yNose + 38, 14, fill);
+    gunBarrel(tex, cx + 18, yNose + 38, 14, fill);
     pts.push({ x: -18, y: yNose + 38 }, { x: 18, y: yNose + 38 });
   }
   return pts;
@@ -395,37 +376,32 @@ function nearClear(tex, x, y, rad) {
   return 0;
 }
 
-function nearInk(tex, x, y) {
-  for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-    const j = tex.index(x + ox, y + oy);
-    if (!tex.inBounds(x + ox, y + oy)) continue;
-    if (tex.data[j + 3] < 0.05) continue;
-    if (tex.data[j] < 0.22 && tex.data[j + 1] < 0.22 && tex.data[j + 2] < 0.22) return true;
-  }
-  return false;
-}
-
-/** Planet-style lighting + metal grain on the already-drawn silhouette. */
-function shadeShip(tex, opts) {
-  const { seed, cx, yNose, yStern, midW, span, profile, colorDetail } = opts;
-  const grain = new Perlin(0.072, 2.05, 0.48, 3, seed + 17, QualityMode.Low);
-  const fine = new Perlin(0.16, 2.1, 0.42, 2, seed + 41, QualityMode.Low);
-  const broad = new Perlin(0.016, 2.0, 0.5, 3, seed + 7, QualityMode.Low);
-  const light = makeLight(180, 0.62);
-  const texAmt = clamp(0.05 + colorDetail * 0.85, 0.05, 0.22);
+function shadeRealistic(tex, opts) {
+  const { seed, cx, yNose, yStern, midW, span, profile, colorDetail, glow } = opts;
+  const grain = new Perlin(0.09, 2.05, 0.45, 4, seed + 17, QualityMode.Low);
+  const fine = new Perlin(0.22, 2.15, 0.4, 3, seed + 41, QualityMode.Low);
+  const wear = new Perlin(0.028, 2.0, 0.52, 4, seed + 7, QualityMode.Low);
+  const scratch = new Perlin(0.55, 2.2, 0.35, 2, seed + 63, QualityMode.Low);
+  const key = makeLight(180, 0.58);
+  const fillL = makeLight(28, 0.42);
+  const wearAmt = clamp(0.12 + colorDetail * 1.4, 0.12, 0.4);
   const len = Math.max(8, yStern - yNose);
   const out = new Float32Array(tex.data);
   const w = tex.width;
   const h = tex.height;
+  const dirtCol = new Color(0.1, 0.09, 0.08, 1);
+  const bareMetal = new Color(0.62, 0.64, 0.66, 1);
+  const heatBlue = new Color(0.22, 0.32, 0.48, 1);
+  const heatBrown = new Color(0.42, 0.22, 0.1, 1);
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (x + y * w) * 4;
       if (tex.data[i + 3] < 0.05) continue;
-      const r = tex.data[i];
-      const g = tex.data[i + 1];
-      const b = tex.data[i + 2];
-      if (r < 0.22 && g < 0.22 && b < 0.22) continue;
+      let r = tex.data[i];
+      let g = tex.data[i + 1];
+      let b = tex.data[i + 2];
+      const emissive = g > 0.42 && b > 0.35 && r > 0.35 && (r + g + b) > 1.4;
 
       const dx = x - cx;
       const t = clamp01((y - yNose) / len);
@@ -435,56 +411,104 @@ function shadeShip(tex, opts) {
       let nx;
       let ny;
       let nz;
+      let height;
       if (onHull) {
         const u = clamp(dx / hullW, -1, 1);
-        const z = Math.sqrt(Math.max(0.04, 1 - u * u));
-        nx = u * 0.95;
-        ny = 0.1;
-        nz = 0.35 + 0.65 * z;
+        const z = Math.sqrt(Math.max(0.03, 1 - u * u));
+        height = 0.42 + 0.58 * z;
+        nx = u * 1.05;
+        ny = 0.08;
+        nz = 0.28 + 0.72 * z;
       } else {
         const wingT = clamp01((Math.abs(dx) - hullW) / Math.max(12, span));
-        nx = Math.sign(dx || 1) * (0.16 + 0.5 * wingT);
-        ny = 0.2;
-        nz = 0.92 - 0.38 * wingT;
+        height = 0.16 + 0.16 * (1 - wingT);
+        nx = Math.sign(dx || 1) * (0.12 + 0.55 * wingT);
+        ny = 0.18;
+        nz = 0.96 - 0.42 * wingT;
       }
-      const nlen = Math.hypot(nx, ny, nz) || 1;
-      const n0 = { nx: nx / nlen, ny: ny / nlen, nz: nz / nlen, r2: 0 };
 
       const g1 = n01(grain, x, y, 0);
       const g2 = n01(fine, x, y, 0);
-      const gLow = n01(broad, x, y, 0);
-      const bump = (g1 - 0.5) * 0.32 + (gLow - 0.5) * (onHull ? 0.16 : 0.06);
-      const n = perturbNormal(n0, bump, bump * 0.35, 0.65);
+      const gW = n01(wear, x, y, 0);
+      const gS = n01(scratch, x * 0.15, y, 0);
+      const seam = r < 0.2 && g < 0.2 && b < 0.2 && !emissive;
+      if (seam) height -= 0.08;
 
-      let lightAmt = lambert(n, light, 0.14, 0.16);
+      const nlen = Math.hypot(nx, ny, nz) || 1;
+      const n0 = { nx: nx / nlen, ny: ny / nlen, nz: nz / nlen, r2: 0 };
+      const bump = (g1 - 0.5) * 0.12 + (g2 - 0.5) * 0.05 + (seam ? -0.15 : 0);
+      const n = perturbNormal(n0, bump, bump * 0.35 + (gS - 0.5) * 0.08, 0.55);
+
+      let albedo = new Color(r, g, b, 1);
+      albedo = mixColor(albedo, albedo.mul(0.97 + g1 * 0.05), 0.08);
+      albedo = mixColor(albedo, dirtCol, (1 - gW) * wearAmt * 0.1);
       if (onHull) {
-        const ridge = Math.pow(Math.max(0, 1 - Math.abs(dx) / hullW), 1.6);
-        lightAmt += ridge * 0.1;
+        const aniso = Math.abs(gS - 0.5) * 0.1;
+        albedo = mixColor(albedo, bareMetal, aniso * wearAmt);
       }
-      const spec = specular(n, light, onHull ? 26 : 48, onHull ? 0.32 : 0.11);
-      const rim = rimLight(n, light, 3.2) * 0.18;
-      const grainMul = 1 + (g2 - 0.5) * texAmt * 0.85 + (gLow - 0.5) * texAmt * 0.28;
-
-      let ao = nearClear(tex, x, y, 3) * 0.4;
-      if (!onHull && Math.abs(dx) < hullW + 7) {
-        ao = Math.max(ao, (1 - clamp01((Math.abs(dx) - hullW) / 7)) * 0.28);
+      const edge = nearClear(tex, x, y, 4);
+      albedo = mixColor(albedo, bareMetal, edge * 0.28);
+      let ao = edge * 0.48;
+      if (!onHull && Math.abs(dx) < hullW + 8) {
+        ao = Math.max(ao, (1 - clamp01((Math.abs(dx) - hullW) / 8)) * 0.32);
       }
-      if (nearInk(tex, x, y)) ao = Math.max(ao, 0.22);
+      albedo = mixColor(albedo, dirtCol, ao * 0.28);
 
-      const shade = clamp(lightAmt * grainMul * (1 - ao), 0.22, 1.35);
-      const emissive = g > 0.48 && b > 0.48 && r < g * 0.9;
-      let lit;
+      if (glow && glow.length) {
+        let dMin = 1e9;
+        for (const gl of glow) {
+          const d = (x - gl.x) * (x - gl.x) + (y - gl.y) * (y - gl.y);
+          if (d < dMin) dMin = d;
+        }
+        const heat = Math.exp(-dMin / 220);
+        albedo = mixColor(albedo, heatBrown, heat * 0.38);
+        albedo = mixColor(albedo, heatBlue, heat * heat * 0.22);
+      }
+
+      const metallic = emissive ? 0.05 : (onHull ? 0.58 : 0.42);
+      const roughness = clamp(0.34 + wearAmt * 0.4 + (1 - gW) * 0.16 - (onHull ? 0.04 : 0) + (seam ? 0.12 : 0), 0.18, 0.82);
+
+      const keyAmt = lambert(n, key, 0.05, 0.12);
+      const fillAmt = lambert(n, fillL, 0, 0.25) * 0.2;
+      let lightAmt = (keyAmt * 1.12 + fillAmt) * (1 - ao * 0.55);
+      if (onHull) {
+        const ridge = Math.pow(Math.max(0, 1 - Math.abs(dx) / hullW), 1.7);
+        lightAmt += ridge * 0.16 * (1 - roughness);
+        lightAmt *= 0.72 + 0.28 * Math.sqrt(Math.max(0.05, 1 - (dx / hullW) * (dx / hullW)));
+      }
+
+      const specPow = 16 + (1 - roughness) * 48;
+      const specK = specular(n, key, specPow, (0.12 + metallic * 0.32) * (1.05 - roughness));
+      const fres = 0.04 + 0.92 * Math.pow(1 - clamp01(n.nz), 5);
+      const env = clamp01(0.12 + n.nx * 0.28 + n.nz * 0.45);
+      const rim = rimLight(n, key, 2.8) * (0.08 + fres * 0.2);
+
+      const diffuse = albedo.mul((1 - metallic * 0.32) * lightAmt);
+      const specCol = mixColor(new Color(1, 0.96, 0.9, 1), albedo, metallic * 0.45);
+      let lit = new Color(
+        clamp01(diffuse.r + specCol.r * specK * (0.35 + fres) + env * fres * 0.07 + rim * 0.55),
+        clamp01(diffuse.g + specCol.g * specK * (0.35 + fres) + env * fres * 0.08 + rim * 0.62),
+        clamp01(diffuse.b + specCol.b * specK * (0.35 + fres) + env * fres * 0.12 + rim * 0.85),
+        1
+      );
+
       if (emissive) {
-        const k = 0.78 + 0.28 * lightAmt;
+        const core = 0.55 + 0.45 * g2;
+        const hot = heatColor(clamp01((r + g + b) / 3));
+        lit = mixColor(lit, hot, 0.35);
         lit = new Color(
-          clamp01(r * k),
-          clamp01(g * k + spec * 0.12),
-          clamp01(b * k + spec * 0.18),
+          clamp01(lit.r * 0.35 + r * core + specK * 0.2),
+          clamp01(lit.g * 0.35 + g * core + specK * 0.15),
+          clamp01(lit.b * 0.35 + b * core + specK * 0.25),
           1
         );
-      } else {
-        lit = shadeRgb(new Color(r, g, b, 1), shade, rim, spec * (0.55 + 0.45 * g2));
       }
+
+      const sparkle = hash2(x, y, seed);
+      if (!emissive && sparkle > 0.992 && metallic > 0.5 && lightAmt > 0.4) {
+        lit = mixColor(lit, Color.white, 0.35);
+      }
+
       out[i] = lit.r;
       out[i + 1] = lit.g;
       out[i + 2] = lit.b;
@@ -524,62 +548,46 @@ export function generateShip(params) {
   const yStern = cy + len * 0.46;
   const profile = HULL_PROFILES[hullKind];
 
-  const hull = colors[0] || new Color(0.86, 0.88, 0.9, 1);
-  const accent = colors[1] || new Color(0.86, 0.22, 0.22, 1);
-  const shell = mixColor(new Color(0.90, 0.92, 0.94, 1), hull, 0.38);
-  const wingFill = mixColor(shell, new Color(0.64, 0.68, 0.72, 1), 0.48);
-  const panelMix = clamp(0.42 + colorDetail * 1.8, 0.35, 0.75);
-  const panel = mixColor(shell, new Color(0.48, 0.52, 0.56, 1), panelMix);
-  const wingPanel = mixColor(wingFill, new Color(0.38, 0.42, 0.46, 1), 0.55);
-  const mark = mixColor(accent, new Color(0.86, 0.16, 0.16, 1), 0.2);
-  const glass = mixColor(new Color(0.40, 0.50, 0.58, 1), hull, 0.22);
+  const hull = colors[0] || new Color(0.55, 0.56, 0.58, 1);
+  const accent = colors[1] || new Color(0.62, 0.12, 0.1, 1);
+  const shell = mixColor(new Color(0.4, 0.42, 0.44, 1), hull, 0.42);
+  const wingFill = mixColor(shell, new Color(0.32, 0.34, 0.36, 1), 0.35);
+  const panelMix = clamp(0.28 + colorDetail * 1.6, 0.25, 0.65);
+  const panel = mixColor(shell, new Color(0.36, 0.38, 0.4, 1), panelMix * 0.7);
+  const wingPanel = mixColor(wingFill, new Color(0.28, 0.3, 0.32, 1), 0.32);
+  const mark = mixColor(accent, new Color(0.45, 0.08, 0.07, 1), 0.35);
+  const glass = mixColor(new Color(0.1, 0.14, 0.18, 1), hull, 0.18);
+  const seamCol = mixColor(shell, new Color(0.22, 0.23, 0.24, 1), 0.55);
 
   const { pieces: wingGeom, tips } = wingPair(wingKind, cx, yNose, len, span, profile, midW);
-  paintWings(tex, wingGeom, wingFill, wingPanel, INK);
+  paintWings(tex, wingGeom, wingFill, wingPanel, seamCol);
 
   const bands = hullBands(profile, cx, yNose, yStern, midW);
   const cleft = cleftForEngine(engineKind, midW);
   notchAft(bands[bands.length - 1], cx, cleft.w, cleft.h);
-  paintHull(tex, bands, shell, panel, INK);
+  paintHull(tex, bands, shell, panel, seamCol);
 
   const chevT = 0.11;
   const chevW = Math.max(6, Math.min(14, widthAt(profile, chevT, midW) * 0.92));
-  fillRect(tex, cx - 2, yNose + 6, 4, 10, mark);
+  fillRect(tex, cx - 1.5, yNose + 6, 3, 11, mark);
   chevron(tex, cx, yNose + len * chevT, chevW, 13, mark);
-
   cockpit(tex, cx, yNose + len * 0.22, Math.max(5, widthAt(profile, 0.28, midW) * 0.44), 16, glass);
+  radiator(tex, cx, yNose + len * 0.56, Math.max(6, widthAt(profile, 0.66, midW) * 0.4), 22, shell);
 
-  ventralDiamond(
-    tex,
-    cx,
-    yNose + len * 0.56,
-    Math.max(6, widthAt(profile, 0.66, midW) * 0.40),
-    24 + (engineKind === 2 ? 4 : 0)
-  );
-
-  const greebles = 2 + Math.round(colorDetail * 28);
+  const greebles = 3 + Math.round(colorDetail * 32);
   for (let i = 0; i < greebles; i++) {
-    const t = 0.34 + i * 0.09;
-    if (t > 0.78) break;
-    const y = yNose + len * t;
-    const hw = widthAt(profile, t, midW);
-    const box = (x0) => {
-      const pts = [
-        { x: x0, y },
-        { x: x0 + 6, y },
-        { x: x0 + 6, y: y + 5 },
-        { x: x0, y: y + 5 },
-      ];
-      fillPolygon(tex, pts, panel);
-      drawPolygon(tex, pts, INK, 1);
-    };
-    box(cx - hw + 3);
-    box(cx + hw - 9);
+    const tg = 0.32 + i * 0.08;
+    if (tg > 0.78) break;
+    const y = yNose + len * tg;
+    const hw = widthAt(profile, tg, midW);
+    const boxCol = mixColor(panel, new Color(0.22, 0.23, 0.24, 1), 0.35);
+    fillRect(tex, cx - hw + 3, y, 6, 5, boxCol);
+    fillRect(tex, cx + hw - 9, y, 6, 5, boxCol);
   }
 
   if (hullKind >= 3) {
-    fillDisc(tex, cx - 7, yNose + len * 0.46, 2.4, panel);
-    fillDisc(tex, cx + 7, yNose + len * 0.46, 2.4, panel);
+    fillDisc(tex, cx - 7, yNose + len * 0.46, 2.2, mixColor(panel, glass, 0.4));
+    fillDisc(tex, cx + 7, yNose + len * 0.46, 2.2, mixColor(panel, glass, 0.4));
   }
 
   const glow = [];
@@ -587,15 +595,20 @@ export function generateShip(params) {
   placeEngines(tex, engineKind, cx, yBay, yStern, midW, glow, tips);
   const weaponPts = placeWeapons(tex, weaponKind, cx, yNose, tips, shell);
 
-  shadeShip(tex, { seed, cx, yNose, yStern, midW, span, profile, colorDetail: colorDetail || 0.08 });
-  outline(tex, INK);
-  for (const g of glow) {
-    stampGlow(tex, g.x, g.y + 2, g.r * 1.5, new Color(0.18, 0.82, 0.92, 0.26));
+  shadeRealistic(tex, {
+    seed, cx, yNose, yStern, midW, span, profile,
+    colorDetail: colorDetail || 0.08,
+    glow,
+  });
+
+  for (const gl of glow) {
+    stampGlow(tex, gl.x, gl.y, gl.r * 2.2, new Color(1, 0.55, 0.18, 0.22));
+    stampGlow(tex, gl.x, gl.y, gl.r * 1.15, new Color(0.55, 0.82, 1, 0.18));
   }
 
   return {
     texture: tex,
-    enginePoints: glow.map((g) => ({ x: g.x - cx, y: g.y - cy })),
+    enginePoints: glow.map((gl) => ({ x: gl.x - cx, y: gl.y - cy })),
     weaponPoints: weaponPts,
     width,
     height,
@@ -610,11 +623,11 @@ export function randomizeShip(state) {
   if (!next.customScale) next.scale = unityRandomFloat(1, 2);
   if (!next.customColors) {
     next.colors = [
-      new Color(0.82 + unityRandomFloat(0, 0.12), 0.84 + unityRandomFloat(0, 0.1), 0.86 + unityRandomFloat(0, 0.1), 1),
-      new Color(unityRandomFloat(0.7, 1), unityRandomFloat(0.12, 0.45), unityRandomFloat(0.12, 0.4), 1),
+      new Color(0.42 + unityRandomFloat(0, 0.22), 0.44 + unityRandomFloat(0, 0.2), 0.46 + unityRandomFloat(0, 0.18), 1),
+      new Color(unityRandomFloat(0.45, 0.85), unityRandomFloat(0.08, 0.28), unityRandomFloat(0.06, 0.22), 1),
     ];
   }
-  if (!next.customColorDetail) next.colorDetail = unityRandomFloat(0.01, 0.1);
+  if (!next.customColorDetail) next.colorDetail = unityRandomFloat(0.04, 0.16);
   if (!next.customBodyDetail) next.bodyDetail = unityRandomFloat(0.01, 0.1);
   if (!next.customWingDetail) next.wingDetail = unityRandomFloat(0.01, 0.1);
   return next;
