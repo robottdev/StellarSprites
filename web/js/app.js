@@ -1,5 +1,6 @@
 import { Color } from "./core.js";
 import { randomize } from "./generate.js";
+import { startFlyMode } from "./fly.js";
 
 const TYPES = [
   { id: "ship", label: "Ship" },
@@ -10,6 +11,7 @@ const TYPES = [
   { id: "station", label: "Station" },
   { id: "blackhole", label: "Black Hole" },
   { id: "background", label: "Background" },
+  { id: "scene", label: "Scene" },
 ];
 
 const SHIP_TYPES = ["Interceptor", "Gunship", "Hauler", "Carrier"];
@@ -94,6 +96,16 @@ function defaultStates() {
       customTint: false, tint: Color.blue,
       customBrightness: false, brightness: 0.5, brightnessMin: 0.15, brightnessMax: 0.85,
     },
+    scene: {
+      customSeed: false, seed: 0,
+      customPlanetCount: false, planetCount: 5,
+      customBelt: false, belt: true,
+      customStation: false, station: true,
+      customHole: false, blackHole: false,
+      customStarColor: false, starColor: new Color(1, 0.92, 0.55, 1),
+      customQuality: true, quality: 1,
+      customScale: true, scale: 1,
+    },
   };
 }
 
@@ -102,6 +114,7 @@ let currentType = "ship";
 let lastResult = null;
 let jobId = 0;
 let worker = null;
+let flySession = null;
 
 const els = {
   nav: document.getElementById("type-nav"),
@@ -111,8 +124,14 @@ const els = {
   status: document.getElementById("status"),
   generate: document.getElementById("btn-generate"),
   save: document.getElementById("btn-save"),
+  fly: document.getElementById("btn-fly"),
   overlay: document.getElementById("generating"),
   meta: document.getElementById("preview-meta"),
+  flyOverlay: document.getElementById("fly-mode"),
+  flyCanvas: document.getElementById("fly-canvas"),
+  flyReadout: document.getElementById("fly-readout"),
+  flyMinimap: document.getElementById("fly-minimap"),
+  flyExit: document.getElementById("btn-fly-exit"),
 };
 
 function getWorker() {
@@ -231,10 +250,12 @@ function renderNav() {
     btn.className = t.id === currentType ? "active" : "";
     btn.textContent = t.label;
     btn.addEventListener("click", () => {
+      stopFly();
       currentType = t.id;
       lastResult = null;
       renderNav();
       renderControls();
+      updateFlyButton();
       generate();
     });
     els.nav.append(btn);
@@ -436,6 +457,32 @@ function renderControls() {
     }));
   }
 
+  if (currentType === "scene") {
+    addSeed();
+    props.append(toggleGroup("Custom Planet Count", s.customPlanetCount, (v) => { s.customPlanetCount = v; renderControls(); }, (body) => {
+      body.append(row("Planets", slider(s.planetCount, 3, 8, 1, (v) => bind(s, "planetCount", v | 0), (v) => String(v | 0))));
+    }));
+    props.append(toggleGroup("Asteroid Belt", s.customBelt, (v) => { s.customBelt = v; renderControls(); }, (body) => {
+      body.append(row("Belt", checkbox(s.belt, (v) => bind(s, "belt", v))));
+    }));
+    props.append(toggleGroup("Station", s.customStation, (v) => { s.customStation = v; renderControls(); }, (body) => {
+      body.append(row("Station", checkbox(s.station, (v) => bind(s, "station", v))));
+    }));
+    props.append(toggleGroup("Black Hole", s.customHole, (v) => { s.customHole = v; renderControls(); }, (body) => {
+      body.append(row("Black Hole", checkbox(s.blackHole, (v) => bind(s, "blackHole", v))));
+    }));
+    props.append(toggleGroup("Custom Star Color", s.customStarColor, (v) => { s.customStarColor = v; renderControls(); }, (body) => {
+      body.append(row("Star", colorInput(s.starColor, (v) => bind(s, "starColor", v))));
+    }));
+    props.append(toggleGroup("Custom Scale", s.customScale, (v) => { s.customScale = v; renderControls(); }, (body) => {
+      body.append(row("Scale", slider(s.scale, 0.6, 1.6, 0.01, (v) => bind(s, "scale", v), (v) => v.toFixed(2))));
+    }));
+    const hint = document.createElement("p");
+    hint.className = "scene-hint";
+    hint.textContent = "Generate a full system, then enter Test Mode to fly around it. WASD to thrust and turn, Shift to boost, Esc to exit.";
+    props.append(hint);
+  }
+
   root.append(props);
 }
 
@@ -460,12 +507,14 @@ function applyScale() {
 }
 
 function generate() {
+  stopFly();
   const type = currentType;
   const next = randomize(type, cloneState(states[type]));
   states[type] = next;
   renderControls();
   setBusy(true);
   setStatus("Generating " + type + "…");
+  updateFlyButton();
   const id = ++jobId;
   const t0 = performance.now();
   getWorker().postMessage({ id, type, params: next });
@@ -491,8 +540,10 @@ function onWorkerMessage(event) {
   applyScale();
   const ms = Math.round(performance.now() - Number(els.generate.dataset.started || performance.now()));
   const s = states[currentType];
-  els.meta.textContent = `${msg.width}×${msg.height} · seed ${s.seed}`;
+  const extra = msg.scene ? ` · ${msg.scene.starName}` : "";
+  els.meta.textContent = `${msg.width}×${msg.height} · seed ${s.seed}${extra}`;
   setStatus(`Generated in ${ms} ms`);
+  updateFlyButton();
 }
 
 function savePng() {
@@ -508,9 +559,40 @@ function savePng() {
   setStatus("Saved " + a.download);
 }
 
+function updateFlyButton() {
+  if (!els.fly) return;
+  els.fly.hidden = currentType !== "scene" || !lastResult || !lastResult.scene;
+}
+
+function stopFly() {
+  if (flySession) {
+    flySession.stop();
+    flySession = null;
+  }
+}
+
+function enterFly() {
+  if (!lastResult || !lastResult.scene) {
+    setStatus("Generate a scene first.", true);
+    return;
+  }
+  stopFly();
+  flySession = startFlyMode({
+    scene: lastResult.scene,
+    overlay: els.flyOverlay,
+    canvas: els.flyCanvas,
+    readout: els.flyReadout,
+    minimap: els.flyMinimap,
+    onExit: () => { flySession = null; },
+  });
+}
+
 els.generate.addEventListener("click", generate);
 els.save.addEventListener("click", savePng);
+if (els.fly) els.fly.addEventListener("click", enterFly);
+if (els.flyExit) els.flyExit.addEventListener("click", stopFly);
 
 renderNav();
 renderControls();
+updateFlyButton();
 generate();
