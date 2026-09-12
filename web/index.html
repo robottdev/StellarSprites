@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Stellar Sprites</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -49,11 +49,21 @@
   <div id="fly-mode" class="fly-mode" hidden>
     <canvas id="fly-canvas" tabindex="0"></canvas>
     <div class="fly-hud">
-      <div class="fly-hint">W thrust · A/D turn · S reverse · Shift boost · Space brake · scroll zoom · Esc exit</div>
+      <div class="fly-hint">WASD or on-screen stick · Shift/Boost · Space/Brake · pinch to zoom · Esc exit</div>
       <div id="fly-readout" class="fly-readout">Test Mode</div>
     </div>
     <canvas id="fly-minimap" width="168" height="168"></canvas>
     <button id="btn-fly-exit" type="button">Exit Test Mode</button>
+    <div id="fly-pad" class="fly-pad">
+      <div id="fly-stick" class="fly-stick" role="presentation" aria-label="Flight stick">
+        <div id="fly-stick-knob" class="fly-stick-knob"></div>
+      </div>
+      <div class="fly-buttons">
+        <button id="fly-boost" type="button">Boost</button>
+        <button id="fly-thrust" type="button">Thrust</button>
+        <button id="fly-brake" type="button">Brake</button>
+      </div>
+    </div>
   </div>
   <script type="module" src="./js/app.js"></script>
 </body>

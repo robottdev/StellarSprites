@@ -99,7 +99,7 @@ function defaultStates() {
     scene: {
       customSeed: false, seed: 0,
       customPlanetCount: false, planetCount: 5,
-      customBelt: false, belt: true,
+      beltChance: 0.45,
       customStation: false, station: true,
       customHole: false, blackHole: false,
       customStarColor: false, starColor: new Color(1, 0.92, 0.55, 1),
@@ -132,6 +132,11 @@ const els = {
   flyReadout: document.getElementById("fly-readout"),
   flyMinimap: document.getElementById("fly-minimap"),
   flyExit: document.getElementById("btn-fly-exit"),
+  flyStick: document.getElementById("fly-stick"),
+  flyKnob: document.getElementById("fly-stick-knob"),
+  flyThrust: document.getElementById("fly-thrust"),
+  flyBoost: document.getElementById("fly-boost"),
+  flyBrake: document.getElementById("fly-brake"),
 };
 
 function getWorker() {
@@ -462,9 +467,7 @@ function renderControls() {
     props.append(toggleGroup("Custom Planet Count", s.customPlanetCount, (v) => { s.customPlanetCount = v; renderControls(); }, (body) => {
       body.append(row("Planets", slider(s.planetCount, 3, 8, 1, (v) => bind(s, "planetCount", v | 0), (v) => String(v | 0))));
     }));
-    props.append(toggleGroup("Asteroid Belt", s.customBelt, (v) => { s.customBelt = v; renderControls(); }, (body) => {
-      body.append(row("Belt", checkbox(s.belt, (v) => bind(s, "belt", v))));
-    }));
+    props.append(row("Belt Chance", slider((s.beltChance ?? 0.45) * 100, 0, 100, 5, (v) => bind(s, "beltChance", v / 100), (v) => `${v | 0}%`)));
     props.append(toggleGroup("Station", s.customStation, (v) => { s.customStation = v; renderControls(); }, (body) => {
       body.append(row("Station", checkbox(s.station, (v) => bind(s, "station", v))));
     }));
@@ -479,7 +482,7 @@ function renderControls() {
     }));
     const hint = document.createElement("p");
     hint.className = "scene-hint";
-    hint.textContent = "Generate a full system, then enter Test Mode to fly around it. WASD to thrust and turn, Shift to boost, Esc to exit.";
+    hint.textContent = "Planets stay put. Moons still orbit their planets. Belt Chance is the odds a belt appears when you generate. Test Mode: WASD on desktop, on-screen stick on mobile.";
     props.append(hint);
   }
 
@@ -584,6 +587,13 @@ function enterFly() {
     readout: els.flyReadout,
     minimap: els.flyMinimap,
     onExit: () => { flySession = null; },
+    touch: {
+      stick: els.flyStick,
+      knob: els.flyKnob,
+      thrust: els.flyThrust,
+      boost: els.flyBoost,
+      brake: els.flyBrake,
+    },
   });
 }
 

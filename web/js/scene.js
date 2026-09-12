@@ -72,17 +72,6 @@ function blitCentered(dest, src, cx, cy, destSize) {
   }
 }
 
-function drawRing(tex, cx, cy, radius, color) {
-  const steps = Math.max(48, (radius * 6) | 0);
-  for (let i = 0; i < steps; i++) {
-    const a = (i / steps) * Math.PI * 2;
-    const x = cx + Math.cos(a) * radius;
-    const y = cy + Math.sin(a) * radius;
-    const cur = tex.getPixel(x | 0, y | 0);
-    tex.setPixel(x | 0, y | 0, overColor(cur, color));
-  }
-}
-
 function planetParams(seed, size, kind, colors, lightAngle) {
   const terrestrial = kind === "terrestrial";
   return {
@@ -106,7 +95,7 @@ export function randomizeScene(state) {
   const next = { ...state };
   if (!next.customSeed) next.seed = unityRandomInt(0, 100000000);
   if (!next.customPlanetCount) next.planetCount = unityRandomInt(4, 8);
-  if (!next.customBelt) next.belt = true;
+  if (next.beltChance == null) next.beltChance = 0.45;
   if (!next.customStation) next.station = unityRandomInt(0, 2) > 0;
   if (!next.customHole) next.blackHole = unityRandomInt(0, 100) < 16;
   if (!next.customStarColor) next.starColor = STAR_PALETTE[unityRandomInt(0, STAR_PALETTE.length)];
@@ -120,7 +109,11 @@ export function generateSolarSystem(params) {
   const planetCount = clamp(params.planetCount | 0, 3, 8);
   const quality = params.quality == null ? 1 : params.quality;
   const sizes = qualitySizes(quality);
-  const includeBelt = params.belt !== false;
+  let beltChance = params.beltChance;
+  if (beltChance == null && params.belt === true) beltChance = 1;
+  if (beltChance == null && params.belt === false) beltChance = 0;
+  beltChance = clamp(beltChance == null ? 0.45 : beltChance, 0, 1);
+  const includeBelt = beltChance >= 1 || (beltChance > 0 && random.range(0, 1) < beltChance);
   const includeStation = !!params.station;
   const includeHole = !!params.blackHole && quality >= 0.5;
   const starColor = params.starColor || STAR_PALETTE[0];
@@ -158,7 +151,8 @@ export function generateSolarSystem(params) {
   let beltOuter = 0;
 
   for (let i = 0; i < planetCount; i++) {
-    const orbitRadius = au * (1.05 + i * 0.82 + random.range(0, 0.12));
+    const dist = au * (1.05 + i * 0.82 + random.range(0, 0.12));
+    const ang = (i / planetCount) * Math.PI * 2 + random.range(-0.35, 0.35);
     const isGas = i >= Math.max(2, planetCount - 3);
     const kind = isGas ? "gas" : "terrestrial";
     const colors = paletteFromSeed(seed + 31 + i * 17);
@@ -197,23 +191,24 @@ export function generateSolarSystem(params) {
       kind,
       spriteIndex,
       radius: pRadius,
-      orbitRadius,
-      orbitSpeed: 0.11 / Math.pow(orbitRadius / au, 1.35),
-      phase: random.range(0, Math.PI * 2),
+      x: Math.cos(ang) * dist,
+      y: Math.sin(ang) * dist,
       moons,
     };
     planets.push(planet);
     if (includeBelt && i === Math.min(1, planetCount - 2)) {
-      beltInner = orbitRadius + pRadius * 2.2;
+      beltInner = dist + pRadius * 2.2;
     }
     if (includeBelt && i === Math.min(2, planetCount - 1) && !beltOuter) {
-      beltOuter = orbitRadius - pRadius * 2.2;
+      beltOuter = dist - pRadius * 2.2;
     }
   }
 
   if (includeBelt && beltOuter <= beltInner) {
-    beltInner = planets[0].orbitRadius * 1.25;
-    beltOuter = planets[Math.min(2, planets.length - 1)].orbitRadius * 0.88;
+    const d0 = Math.hypot(planets[0].x, planets[0].y);
+    const d2 = Math.hypot(planets[Math.min(2, planets.length - 1)].x, planets[Math.min(2, planets.length - 1)].y);
+    beltInner = d0 * 1.25;
+    beltOuter = d2 * 0.88;
   }
 
   const asteroids = [];
@@ -234,12 +229,14 @@ export function generateSolarSystem(params) {
     }
     const count = quality < 0.5 ? 10 : 28;
     for (let r = 0; r < count; r++) {
+      const rad = beltInner + ((r * 17) % 1000) / 1000 * (beltOuter - beltInner);
+      const ang = random.range(0, Math.PI * 2);
       rocks.push({
         spriteIndex: asteroids[r % asteroids.length],
         radius: 10 + (r % 5) * 2,
-        orbitRadius: beltInner + ((r * 17) % 1000) / 1000 * (beltOuter - beltInner),
-        orbitSpeed: 0.07 + (r % 7) * 0.006,
-        phase: random.range(0, Math.PI * 2),
+        x: Math.cos(ang) * rad,
+        y: Math.sin(ang) * rad,
+        heading: random.range(0, Math.PI * 2),
         spin: (random.range(0, 1) - 0.5) * 0.8,
       });
     }
@@ -272,9 +269,8 @@ export function generateSolarSystem(params) {
       name: starName + " Singularity",
       spriteIndex: pushSprite(hTex),
       radius: 70,
-      orbitRadius: planets[planets.length - 1].orbitRadius * 1.45,
-      orbitSpeed: 0.028,
-      phase: random.range(0, Math.PI * 2),
+      x: planets[planets.length - 1].x * 1.35,
+      y: planets[planets.length - 1].y * 1.35,
     };
   }
 
@@ -299,20 +295,22 @@ export function generateSolarSystem(params) {
       colors: [paletteFromSeed(seed + 410 + n)[0], paletteFromSeed(seed + 411 + n)[1]],
       colorDetail: 0.07,
     }).texture;
+    const host = planets[Math.min(n + 1, planets.length - 1)];
+    const heading = random.range(0, Math.PI * 2);
     npcShips.push({
       name: (n % 2 ? "Patrol " : "Hauler ") + (n + 1),
       spriteIndex: pushSprite(nTex),
       radius: 22,
-      orbitRadius: planets[Math.min(n + 1, planets.length - 1)].orbitRadius,
-      orbitSpeed: 0.09 + n * 0.02,
-      phase: random.range(0, Math.PI * 2),
+      x: host.x + Math.cos(heading) * (host.radius + 80),
+      y: host.y + Math.sin(heading) * (host.radius + 80),
+      heading,
+      speed: 28 + n * 10,
     });
   }
 
-  const maxOrbit = hole
-    ? hole.orbitRadius
-    : planets[planets.length - 1].orbitRadius * 1.15;
-  const worldRadius = maxOrbit + 400;
+  let worldRadius = sunRadius + 400;
+  for (const p of planets) worldRadius = Math.max(worldRadius, Math.hypot(p.x, p.y) + p.radius + 200);
+  if (hole) worldRadius = Math.max(worldRadius, Math.hypot(hole.x, hole.y) + 200);
 
   const map = new SpriteTexture(sizes.map, sizes.map);
   const mapScale = (sizes.map * 0.42) / worldRadius;
@@ -325,20 +323,12 @@ export function generateSolarSystem(params) {
       map.setPixel(x, y, bgTex.getPixel(bx % sizes.bg, by % sizes.bg));
     }
   }
-  for (const p of planets) {
-    drawRing(map, mcx, mcy, p.orbitRadius * mapScale, new Color(0.55, 0.7, 1, 0.22));
-  }
-  if (includeBelt && beltOuter > beltInner) {
-    drawRing(map, mcx, mcy, beltInner * mapScale, new Color(0.8, 0.7, 0.4, 0.18));
-    drawRing(map, mcx, mcy, beltOuter * mapScale, new Color(0.8, 0.7, 0.4, 0.18));
-  }
-  if (hole) drawRing(map, mcx, mcy, hole.orbitRadius * mapScale, new Color(1, 0.4, 0.2, 0.2));
 
   blitCentered(map, sunTex, mcx, mcy, Math.max(28, sunRadius * mapScale * 2.4));
   for (const p of planets) {
     const ptex = textureFromPack(sprites[p.spriteIndex]);
-    const x = mcx + Math.cos(p.phase) * p.orbitRadius * mapScale;
-    const y = mcy + Math.sin(p.phase) * p.orbitRadius * mapScale;
+    const x = mcx + p.x * mapScale;
+    const y = mcy + p.y * mapScale;
     blitCentered(map, ptex, x, y, Math.max(16, Math.min(40, p.radius * mapScale * 3.2)));
     for (const m of p.moons) {
       const mx = x + Math.cos(m.phase) * Math.max(10, m.orbitRadius * mapScale * 0.35);
@@ -348,19 +338,16 @@ export function generateSolarSystem(params) {
   }
   if (station) {
     const host = planets[station.parent] || planets[0];
-    const hx = mcx + Math.cos(host.phase) * host.orbitRadius * mapScale;
-    const hy = mcy + Math.sin(host.phase) * host.orbitRadius * mapScale;
-    blitCentered(map, textureFromPack(sprites[station.spriteIndex]), hx + 12, hy - 8, 14);
+    blitCentered(map, textureFromPack(sprites[station.spriteIndex]), mcx + host.x * mapScale + 12, mcy + host.y * mapScale - 8, 14);
   }
   if (includeBelt && rocks.length) {
     for (let i = 0; i < rocks.length; i += 3) {
       const r = rocks[i];
-      const x = mcx + Math.cos(r.phase) * r.orbitRadius * mapScale;
-      const y = mcy + Math.sin(r.phase) * r.orbitRadius * mapScale;
-      blitCentered(map, textureFromPack(sprites[r.spriteIndex]), x, y, 5);
+      blitCentered(map, textureFromPack(sprites[r.spriteIndex]), mcx + r.x * mapScale, mcy + r.y * mapScale, 5);
     }
   }
 
+  const home = planets[Math.min(1, planets.length - 1)];
   const scene = {
     seed,
     starName,
@@ -374,8 +361,8 @@ export function generateSolarSystem(params) {
     player: {
       spriteIndex: shipSprite,
       radius: 26,
-      x: planets[Math.min(1, planets.length - 1)].orbitRadius * 0.92,
-      y: 80,
+      x: home.x + home.radius * 2.4,
+      y: home.y + 40,
       heading: 0,
     },
     npcs: npcShips,
