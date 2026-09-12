@@ -179,7 +179,23 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit,
   document.body.style.overflow = "hidden";
   canvas.focus();
 
+  const visualViewport = window.visualViewport;
+
+  function pinOverlay() {
+    const top = visualViewport ? visualViewport.offsetTop : 0;
+    const left = visualViewport ? visualViewport.offsetLeft : 0;
+    const w = visualViewport ? visualViewport.width : window.innerWidth;
+    const h = visualViewport ? visualViewport.height : window.innerHeight;
+    overlay.style.top = Math.round(top) + "px";
+    overlay.style.left = Math.round(left) + "px";
+    overlay.style.width = Math.max(1, Math.round(w)) + "px";
+    overlay.style.height = Math.max(1, Math.round(h)) + "px";
+    overlay.style.right = "auto";
+    overlay.style.bottom = "auto";
+  }
+
   function resize() {
+    pinOverlay();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = overlay.clientWidth;
     const h = overlay.clientHeight;
@@ -193,6 +209,10 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit,
     }
   }
   window.addEventListener("resize", resize);
+  if (visualViewport) {
+    visualViewport.addEventListener("resize", resize);
+    visualViewport.addEventListener("scroll", resize);
+  }
   resize();
 
   function stepMotion(dt) {
@@ -414,11 +434,21 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit,
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("resize", resize);
+    if (visualViewport) {
+      visualViewport.removeEventListener("resize", resize);
+      visualViewport.removeEventListener("scroll", resize);
+    }
     canvas.removeEventListener("wheel", onWheel);
     canvas.removeEventListener("touchstart", onTouchStart);
     canvas.removeEventListener("touchmove", onTouchMove);
     canvas.removeEventListener("touchend", onTouchEnd);
     for (const fn of cleanups) fn();
+    overlay.style.top = "";
+    overlay.style.left = "";
+    overlay.style.width = "";
+    overlay.style.height = "";
+    overlay.style.right = "";
+    overlay.style.bottom = "";
     overlay.hidden = true;
     document.body.style.overflow = prevOverflow;
     if (onExit) onExit();
