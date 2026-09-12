@@ -307,6 +307,7 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit,
       ctx.arc(0, 0, size * 0.48, 0, Math.PI * 2);
       ctx.clip();
     }
+    ctx.imageSmoothingEnabled = true;
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
   }
@@ -379,13 +380,20 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit,
 
     const ctx = canvas.getContext("2d");
     const bg = sprites[scene.background.spriteIndex];
-    const bw = canvas.width * 1.45;
-    const bh = canvas.height * 1.45;
-    const maxX = (bw - canvas.width) / 2 - 4;
-    const maxY = (bh - canvas.height) / 2 - 4;
-    const ox = Math.max(-maxX, Math.min(maxX, camera.x * 0.035));
-    const oy = Math.max(-maxY, Math.min(maxY, camera.y * 0.035));
-    ctx.drawImage(bg, canvas.width / 2 - bw / 2 - ox, canvas.height / 2 - bh / 2 - oy, bw, bh);
+    if (bg) {
+      const tw = Math.max(1, bg.width);
+      const th = Math.max(1, bg.height);
+      const ox = Math.round(((camera.x * 0.035) % tw + tw) % tw);
+      const oy = Math.round(((camera.y * 0.035) % th + th) % th);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      for (let y = -oy; y < canvas.height; y += th) {
+        for (let x = -ox; x < canvas.width; x += tw) {
+          ctx.drawImage(bg, x, y);
+        }
+      }
+      ctx.restore();
+    }
 
     const sunScreen = worldToScreen(0, 0, ctx);
     const glowR = scene.sun.radius * 2.4 * camera.zoom;

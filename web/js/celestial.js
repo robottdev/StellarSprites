@@ -465,6 +465,10 @@ export function generateBlackhole(params) {
   return tex;
 }
 
+function wrapCoord(v, max) {
+  return ((v % max) + max) % max;
+}
+
 export function generateBackground(params) {
   const { seed, width, height, frequency, lacunarity, persistence, octaves, starCount, tint, brightness } = params;
   const random = new SS_Random(seed);
@@ -497,6 +501,18 @@ export function generateBackground(params) {
     }
   }
 
+  const paint = (px, py, col, k) => {
+    const x = wrapCoord(px, width) | 0;
+    const y = wrapCoord(py, height) | 0;
+    const cur = tex.getPixel(x, y);
+    tex.setPixel(x, y, new Color(
+      clamp01(cur.r + col.r * k),
+      clamp01(cur.g + col.g * k),
+      clamp01(cur.b + col.b * k),
+      1
+    ));
+  };
+
   for (let i = 0; i < starCount; i++) {
     const x = random.range(0, width);
     const y = random.range(0, height);
@@ -510,23 +526,22 @@ export function generateBackground(params) {
           ? new Color(1, 0.92, 0.75, 1)
           : Color.white;
     const coreA = 0.55 + mag * 0.7;
-    const cur = tex.getPixel(x, y);
-    tex.setPixel(x, y, new Color(
-      clamp01(cur.r + col.r * coreA),
-      clamp01(cur.g + col.g * coreA),
-      clamp01(cur.b + col.b * coreA),
-      1
-    ));
+    paint(x, y, col, coreA);
     if (mag > 0.55) {
-      stampGlow(tex, x, y, 1.2 + mag * 2.0, new Color(col.r, col.g, col.b, 0.38 * mag));
+      const glowR = 1.2 + mag * 2.0;
+      const glowCol = new Color(col.r, col.g, col.b, 0.38 * mag);
+      stampGlow(tex, x, y, glowR, glowCol);
+      if (x < glowR) stampGlow(tex, x + width, y, glowR, glowCol);
+      if (x > width - glowR) stampGlow(tex, x - width, y, glowR, glowCol);
+      if (y < glowR) stampGlow(tex, x, y + height, glowR, glowCol);
+      if (y > height - glowR) stampGlow(tex, x, y - height, glowR, glowCol);
     }
-    if (mag > 0.86 && x > 2 && y > 2 && x < width - 3 && y < height - 3) {
+    if (mag > 0.86) {
       const spike = 0.42 * mag;
       for (let s = 1; s <= 2; s++) {
+        const k = spike * (s === 1 ? 1 : 0.45);
         for (const [sx, sy] of [[s, 0], [-s, 0], [0, s], [0, -s]]) {
-          const p = tex.getPixel(x + sx, y + sy);
-          const k = spike * (s === 1 ? 1 : 0.45);
-          tex.setPixel(x + sx, y + sy, new Color(clamp01(p.r + k * col.r), clamp01(p.g + k * col.g), clamp01(p.b + k * col.b), 1));
+          paint(x + sx, y + sy, col, k);
         }
       }
     }
