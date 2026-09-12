@@ -16,6 +16,44 @@ export function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
+export function smoothstep(edge0, edge1, x) {
+  const t = clamp01((x - edge0) / Math.max(1e-6, edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
+export function mixColor(a, b, t) {
+  const u = 1 - t;
+  return new Color(a.r * u + b.r * t, a.g * u + b.g * t, a.b * u + b.b * t, a.a * u + b.a * t);
+}
+
+/** Unpremultiplied alpha-over. */
+export function overColor(dst, src) {
+  const sa = clamp01(src.a);
+  const da = clamp01(dst.a);
+  const outA = sa + da * (1 - sa);
+  if (outA < 1e-5) return new Color(0, 0, 0, 0);
+  const k = 1 - sa;
+  return new Color(
+    (src.r * sa + dst.r * da * k) / outA,
+    (src.g * sa + dst.g * da * k) / outA,
+    (src.b * sa + dst.b * da * k) / outA,
+    outA
+  );
+}
+
+export function sampleStops(colors, t) {
+  if (!colors || !colors.length) return Color.white.clone();
+  if (colors.length === 1) return colors[0].clone();
+  const x = clamp01(t) * (colors.length - 1);
+  const i = Math.min(colors.length - 2, Math.floor(x));
+  return mixColor(colors[i], colors[i + 1], x - i);
+}
+
+export function hash2(x, y, seed = 0) {
+  const n = Math.sin(x * 127.1 + y * 311.7 + seed * 0.013) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
 export function distance(x1, y1, x2, y2) {
   const dx = x1 - x2;
   const dy = y1 - y2;
@@ -102,8 +140,10 @@ export class SS_Random {
   }
 
   range(min, max) {
-    if (Number.isInteger(min) && Number.isInteger(max)) {
-      if (max <= min) return min;
+    if (max <= min) return min;
+    // Unity int Range is exclusive-max. Treat span>1 integer pairs as ints;
+    // Range(0, 1) in this codebase always means a unit float (0f, 1f).
+    if (Number.isInteger(min) && Number.isInteger(max) && (max - min) > 1) {
       return min + (this.next() % (max - min));
     }
     return min + this.nextDouble() * (max - min);
