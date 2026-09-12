@@ -283,18 +283,26 @@ input[type="range"] { width: 100%; }
 
 .fly-mode {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  height: 100svh;
   z-index: 40;
   background: #02050c;
   overflow: hidden;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  box-sizing: border-box;
 }
 
 .fly-mode[hidden] { display: none !important; }
 
 #fly-canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -304,9 +312,9 @@ input[type="range"] { width: 100%; }
 
 .fly-hud {
   position: absolute;
-  top: 16px;
-  left: 16px;
-  right: 196px;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  left: max(158px, calc(148px + env(safe-area-inset-left, 0px)));
+  right: max(196px, calc(180px + env(safe-area-inset-right, 0px)));
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -334,8 +342,8 @@ input[type="range"] { width: 100%; }
 
 #fly-minimap {
   position: absolute;
-  right: 16px;
-  top: 16px;
+  right: max(10px, env(safe-area-inset-right, 0px));
+  top: max(10px, env(safe-area-inset-top, 0px));
   width: 168px;
   height: 168px;
   border-radius: 12px;
@@ -346,8 +354,10 @@ input[type="range"] { width: 100%; }
 
 #btn-fly-exit {
   position: absolute;
-  left: 16px;
-  bottom: calc(28px + 132px + env(safe-area-inset-bottom, 0px));
+  top: max(10px, env(safe-area-inset-top, 0px));
+  left: max(10px, env(safe-area-inset-left, 0px));
+  bottom: auto;
+  z-index: 3;
 }
 
 .fly-pad {
@@ -358,13 +368,18 @@ input[type="range"] { width: 100%; }
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 0 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  gap: 12px;
+  padding-top: 8px;
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   pointer-events: none;
   z-index: 2;
 }
 
 .fly-stick {
   pointer-events: auto;
+  flex: 0 0 auto;
   width: 132px;
   height: 132px;
   border-radius: 50%;
@@ -425,30 +440,57 @@ input[type="range"] { width: 100%; }
   border-color: #ff7b8a88;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px), (max-height: 640px), (pointer: coarse) {
   .fly-hint { display: none; }
   .fly-hud {
-    top: 58px;
-    left: 16px;
-    right: 140px;
+    top: max(54px, calc(44px + env(safe-area-inset-top, 0px)));
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(128px, calc(116px + env(safe-area-inset-right, 0px)));
     flex-direction: column;
   }
   .fly-readout {
     max-width: none;
-    white-space: normal;
+    white-space: nowrap;
   }
   #fly-minimap {
-    width: 110px;
-    height: 110px;
+    width: 104px;
+    height: 104px;
   }
   .fly-stick {
-    width: 118px;
-    height: 118px;
+    width: 112px;
+    height: 112px;
   }
-  #btn-fly-exit {
-    left: 16px;
-    bottom: auto;
-    top: 16px;
+  .fly-buttons {
+    width: min(34vw, 112px);
+    gap: 8px;
+  }
+  .fly-buttons button {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+}
+
+@media (max-height: 430px) {
+  .fly-stick {
+    width: 92px;
+    height: 92px;
+  }
+  .fly-stick-knob {
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+  }
+  .fly-buttons {
+    flex-direction: row;
+    width: auto;
+  }
+  .fly-buttons button {
+    min-width: 68px;
+    min-height: 40px;
+  }
+  #fly-minimap {
+    width: 88px;
+    height: 88px;
   }
 }
 
