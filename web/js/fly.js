@@ -7,13 +7,26 @@ function canvasFromSprite(sprite) {
   return c;
 }
 
-function orbitPos(radius, phase) {
-  return { x: Math.cos(phase) * radius, y: Math.sin(phase) * radius };
+function moonPos(planet, moon) {
+  return {
+    x: planet.x + Math.cos(moon.phase) * moon.orbitRadius,
+    y: planet.y + Math.sin(moon.phase) * moon.orbitRadius,
+  };
 }
 
-export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit }) {
+function stationPos(station, planets) {
+  const host = planets[station.parent] || planets[0];
+  return {
+    x: host.x + Math.cos(station.phase) * station.orbitRadius,
+    y: host.y + Math.sin(station.phase) * station.orbitRadius,
+  };
+}
+
+export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit, touch }) {
   const sprites = scene.sprites.map(canvasFromSprite);
   const keys = new Set();
+  const pad = { turn: 0, thrust: 0, thrustHold: false, boost: false, brake: false };
+  const prevOverflow = document.body.style.overflow;
   const ship = {
     x: scene.player.x,
     y: scene.player.y,
@@ -25,7 +38,7 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
   const camera = { x: ship.x, y: ship.y, zoom: 0.55 };
   const time = { t: 0, last: performance.now() };
   let running = true;
-  let nearest = scene.sun.name;
+  let pinch0 = 0;
 
   const planets = scene.planets.map((p) => ({ ...p, moons: p.moons.map((m) => ({ ...m })) }));
   const rocks = scene.belt ? scene.belt.rocks.map((r) => ({ ...r })) : [];
@@ -50,11 +63,120 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     const next = camera.zoom * (e.deltaY > 0 ? 0.9 : 1.1);
     camera.zoom = Math.max(0.28, Math.min(2.4, next));
   }
+  function touchDist(a, b) {
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  }
+  function onTouchStart(e) {
+    if (e.touches.length === 2) {
+      pinch0 = touchDist(e.touches[0], e.touches[1]);
+    }
+  }
+  function onTouchMove(e) {
+    if (e.touches.length === 2 && pinch0) {
+      e.preventDefault();
+      const d = touchDist(e.touches[0], e.touches[1]);
+      camera.zoom = Math.max(0.28, Math.min(2.4, camera.zoom * (d / pinch0)));
+      pinch0 = d;
+    }
+  }
+  function onTouchEnd(e) {
+    if (e.touches.length < 2) pinch0 = 0;
+  }
+
+  const cleanups = [];
+  function bindHold(el, key) {
+    if (!el) return;
+    const down = (e) => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      pad[key] = true;
+    };
+    const up = () => { pad[key] = false; };
+    const blockMenu = (e) => e.preventDefault();
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    el.addEventListener("lostpointercapture", up);
+    el.addEventListener("contextmenu", blockMenu);
+    cleanups.push(() => {
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      el.removeEventListener("lostpointercapture", up);
+      el.removeEventListener("contextmenu", blockMenu);
+    });
+  }
+
+  function bindStick(el, knob) {
+    if (!el) return;
+    let pid = null;
+    const reset = () => {
+      pid = null;
+      pad.turn = 0;
+      pad.thrust = 0;
+      if (knob) knob.style.transform = "";
+    };
+    const move = (e) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      let dx = e.clientX - cx;
+      let dy = e.clientY - cy;
+      const max = r.width * 0.38;
+      const len = Math.hypot(dx, dy) || 1;
+      if (len > max) {
+        dx *= max / len;
+        dy *= max / len;
+      }
+      const mag = Math.hypot(dx, dy) / max;
+      if (mag < 0.12) {
+        pad.turn = 0;
+        pad.thrust = 0;
+      } else {
+        pad.turn = dx / max;
+        pad.thrust = Math.max(-1, Math.min(1, -dy / max));
+      }
+      if (knob) knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    const down = (e) => {
+      e.preventDefault();
+      pid = e.pointerId;
+      el.setPointerCapture(pid);
+      move(e);
+    };
+    const track = (e) => {
+      if (pid === e.pointerId) move(e);
+    };
+    const blockMenu = (e) => e.preventDefault();
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", track);
+    el.addEventListener("pointerup", reset);
+    el.addEventListener("pointercancel", reset);
+    el.addEventListener("lostpointercapture", reset);
+    el.addEventListener("contextmenu", blockMenu);
+    cleanups.push(() => {
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointermove", track);
+      el.removeEventListener("pointerup", reset);
+      el.removeEventListener("pointercancel", reset);
+      el.removeEventListener("lostpointercapture", reset);
+      el.removeEventListener("contextmenu", blockMenu);
+      reset();
+    });
+  }
 
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+  canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+  canvas.addEventListener("touchend", onTouchEnd);
+  bindStick(touch && touch.stick, touch && touch.knob);
+  bindHold(touch && touch.thrust, "thrustHold");
+  bindHold(touch && touch.boost, "boost");
+  bindHold(touch && touch.brake, "brake");
   overlay.hidden = false;
+  document.body.style.overflow = "hidden";
   canvas.focus();
 
   function resize() {
@@ -73,40 +195,39 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
   window.addEventListener("resize", resize);
   resize();
 
-  function bodyPos(orbitRadius, phase) {
-    return orbitPos(orbitRadius, phase);
-  }
-
-  function stepOrbits(dt) {
+  function stepMotion(dt) {
     for (const p of planets) {
-      p.phase += p.orbitSpeed * dt;
       for (const m of p.moons) m.phase += m.orbitSpeed * dt;
     }
-    for (const r of rocks) {
-      r.phase += r.orbitSpeed * dt;
-      r.heading = (r.heading || 0) + r.spin * dt;
-    }
-    for (const n of npcs) n.phase += n.orbitSpeed * dt;
+    for (const r of rocks) r.heading = (r.heading || 0) + r.spin * dt;
     if (station) station.phase += station.orbitSpeed * dt;
-    if (hole) hole.phase += hole.orbitSpeed * dt;
+    for (const n of npcs) {
+      n.heading += Math.sin(time.t * 0.35 + (n.speed || 30) * 0.01) * 0.4 * dt;
+      const sp = n.speed || 32;
+      n.x += Math.sin(n.heading) * sp * dt;
+      n.y += -Math.cos(n.heading) * sp * dt;
+    }
   }
 
   function stepShip(dt) {
-    const turn = (keys.has("KeyA") || keys.has("ArrowLeft") ? -1 : 0) + (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0);
+    const keyTurn = (keys.has("KeyA") || keys.has("ArrowLeft") ? -1 : 0) + (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0);
+    const turn = Math.max(-1, Math.min(1, keyTurn + pad.turn));
     ship.heading += turn * 2.6 * dt;
-    const boost = keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const boost = pad.boost || keys.has("ShiftLeft") || keys.has("ShiftRight");
     const accel = (boost ? 520 : 240) * dt;
     const fx = Math.sin(ship.heading);
     const fy = -Math.cos(ship.heading);
-    if (keys.has("KeyW") || keys.has("ArrowUp")) {
-      ship.vx += fx * accel;
-      ship.vy += fy * accel;
+    const keyThrust = (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) + (keys.has("KeyS") || keys.has("ArrowDown") ? -0.45 : 0);
+    const stickThrust = pad.thrustHold ? 1 : pad.thrust;
+    const thrust = Math.max(-1, Math.min(1, keyThrust + stickThrust));
+    if (thrust > 0.04) {
+      ship.vx += fx * accel * thrust;
+      ship.vy += fy * accel * thrust;
+    } else if (thrust < -0.04) {
+      ship.vx += fx * accel * thrust * 0.45;
+      ship.vy += fy * accel * thrust * 0.45;
     }
-    if (keys.has("KeyS") || keys.has("ArrowDown")) {
-      ship.vx -= fx * accel * 0.45;
-      ship.vy -= fy * accel * 0.45;
-    }
-    if (keys.has("Space") || keys.has("KeyX")) {
+    if (pad.brake || keys.has("Space") || keys.has("KeyX")) {
       ship.vx *= Math.exp(-2.4 * dt);
       ship.vy *= Math.exp(-2.4 * dt);
     }
@@ -159,9 +280,7 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     ctx.save();
     ctx.translate(p.x, p.y);
     let rot = rotation || 0;
-    if (lightFromSun) {
-      rot = Math.atan2(y, x);
-    }
+    if (lightFromSun) rot = Math.atan2(y, x);
     ctx.rotate(rot);
     if (clipCircle) {
       ctx.beginPath();
@@ -183,25 +302,18 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
       }
     };
     for (const p of planets) {
-      const pos = bodyPos(p.orbitRadius, p.phase);
-      consider(p.name, pos.x, pos.y, p.radius);
+      consider(p.name, p.x, p.y, p.radius);
       for (const m of p.moons) {
-        const mp = bodyPos(m.orbitRadius, m.phase);
-        consider(m.name, pos.x + mp.x, pos.y + mp.y, m.radius);
+        const mp = moonPos(p, m);
+        consider(m.name, mp.x, mp.y, m.radius);
       }
     }
     if (station) {
-      const host = planets[station.parent] || planets[0];
-      const hp = bodyPos(host.orbitRadius, host.phase);
-      const sp = bodyPos(station.orbitRadius, station.phase);
-      consider(station.name, hp.x + sp.x, hp.y + sp.y, station.radius);
+      const sp = stationPos(station, planets);
+      consider(station.name, sp.x, sp.y, station.radius);
     }
-    if (hole) {
-      const hp = bodyPos(hole.orbitRadius, hole.phase);
-      consider(hole.name, hp.x, hp.y, hole.radius);
-    }
-    nearest = bestD < 420 ? best : scene.starName + " system";
-    return { name: nearest, dist: bestD };
+    if (hole) consider(hole.name, hole.x, hole.y, hole.radius);
+    return { name: bestD < 420 ? best : scene.starName + " system", dist: bestD };
   }
 
   function drawMinimap() {
@@ -212,13 +324,6 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     const scale = (w * 0.42) / scene.worldRadius;
     m.fillStyle = "#071018";
     m.fillRect(0, 0, w, h);
-    m.strokeStyle = "rgba(120,170,255,0.25)";
-    m.lineWidth = 1;
-    for (const p of planets) {
-      m.beginPath();
-      m.arc(w / 2, h / 2, p.orbitRadius * scale, 0, Math.PI * 2);
-      m.stroke();
-    }
     const dot = (x, y, r, color) => {
       m.fillStyle = color;
       m.beginPath();
@@ -227,13 +332,9 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     };
     dot(0, 0, scene.sun.radius, "#ffd27a");
     for (const p of planets) {
-      const pos = bodyPos(p.orbitRadius, p.phase);
-      dot(pos.x, pos.y, p.radius, p.kind === "gas" ? "#d6b48a" : "#7ec8ff");
+      dot(p.x, p.y, p.radius, p.kind === "gas" ? "#d6b48a" : "#7ec8ff");
     }
-    if (hole) {
-      const hp = bodyPos(hole.orbitRadius, hole.phase);
-      dot(hp.x, hp.y, hole.radius, "#ff6b4a");
-    }
+    if (hole) dot(hole.x, hole.y, hole.radius, "#ff6b4a");
     m.fillStyle = "#fff";
     const ang = ship.heading;
     const sx = w / 2 + ship.x * scale;
@@ -253,46 +354,18 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     const dt = Math.min(0.05, (now - time.last) / 1000);
     time.last = now;
     time.t += dt;
-    stepOrbits(dt);
+    stepMotion(dt);
     stepShip(dt);
 
     const ctx = canvas.getContext("2d");
-        const bg = sprites[scene.background.spriteIndex];
-        const bw = canvas.width * 1.45;
-        const bh = canvas.height * 1.45;
-        const maxX = (bw - canvas.width) / 2 - 4;
-        const maxY = (bh - canvas.height) / 2 - 4;
-        const ox = Math.max(-maxX, Math.min(maxX, camera.x * 0.035));
-        const oy = Math.max(-maxY, Math.min(maxY, camera.y * 0.035));
-        ctx.drawImage(
-          bg,
-          canvas.width / 2 - bw / 2 - ox,
-          canvas.height / 2 - bh / 2 - oy,
-          bw,
-          bh
-        );
-
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.scale(camera.zoom, camera.zoom);
-    ctx.translate(-camera.x, -camera.y);
-    ctx.strokeStyle = "rgba(140, 180, 255, 0.16)";
-    ctx.lineWidth = 1.2 / camera.zoom;
-    for (const p of planets) {
-      ctx.beginPath();
-      ctx.arc(0, 0, p.orbitRadius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    if (scene.belt) {
-      ctx.strokeStyle = "rgba(210, 180, 90, 0.12)";
-      ctx.beginPath();
-      ctx.arc(0, 0, scene.belt.inner, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 0, scene.belt.outer, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
+    const bg = sprites[scene.background.spriteIndex];
+    const bw = canvas.width * 1.45;
+    const bh = canvas.height * 1.45;
+    const maxX = (bw - canvas.width) / 2 - 4;
+    const maxY = (bh - canvas.height) / 2 - 4;
+    const ox = Math.max(-maxX, Math.min(maxX, camera.x * 0.035));
+    const oy = Math.max(-maxY, Math.min(maxY, camera.y * 0.035));
+    ctx.drawImage(bg, canvas.width / 2 - bw / 2 - ox, canvas.height / 2 - bh / 2 - oy, bw, bh);
 
     const sunScreen = worldToScreen(0, 0, ctx);
     const glowR = scene.sun.radius * 2.4 * camera.zoom;
@@ -306,32 +379,23 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     ctx.fill();
     drawSprite(ctx, scene.sun.spriteIndex, 0, 0, scene.sun.radius, 0, false, true);
 
-    if (hole) {
-      const hp = bodyPos(hole.orbitRadius, hole.phase);
-      drawSprite(ctx, hole.spriteIndex, hp.x, hp.y, hole.radius, 0, false);
-    }
+    if (hole) drawSprite(ctx, hole.spriteIndex, hole.x, hole.y, hole.radius, 0, false);
     for (const r of rocks) {
-      const rp = bodyPos(r.orbitRadius, r.phase);
-      drawSprite(ctx, r.spriteIndex, rp.x, rp.y, r.radius, r.heading || 0, false);
+      drawSprite(ctx, r.spriteIndex, r.x, r.y, r.radius, r.heading || 0, false);
     }
     for (const p of planets) {
-      const pos = bodyPos(p.orbitRadius, p.phase);
-      drawSprite(ctx, p.spriteIndex, pos.x, pos.y, p.radius, 0, true);
+      drawSprite(ctx, p.spriteIndex, p.x, p.y, p.radius, 0, true);
       for (const m of p.moons) {
-        const mp = bodyPos(m.orbitRadius, m.phase);
-        drawSprite(ctx, m.spriteIndex, pos.x + mp.x, pos.y + mp.y, m.radius, 0, true);
+        const mp = moonPos(p, m);
+        drawSprite(ctx, m.spriteIndex, mp.x, mp.y, m.radius, 0, true);
       }
     }
     if (station) {
-      const host = planets[station.parent] || planets[0];
-      const hp = bodyPos(host.orbitRadius, host.phase);
-      const sp = bodyPos(station.orbitRadius, station.phase);
-      drawSprite(ctx, station.spriteIndex, hp.x + sp.x, hp.y + sp.y, station.radius, station.phase, false);
+      const sp = stationPos(station, planets);
+      drawSprite(ctx, station.spriteIndex, sp.x, sp.y, station.radius, station.phase, false);
     }
     for (const n of npcs) {
-      const np = bodyPos(n.orbitRadius, n.phase);
-      const tang = n.phase + Math.PI / 2;
-      drawSprite(ctx, n.spriteIndex, np.x, np.y, n.radius, tang, false);
+      drawSprite(ctx, n.spriteIndex, n.x, n.y, n.radius, n.heading, false);
     }
     drawSprite(ctx, scene.player.spriteIndex, ship.x, ship.y, ship.radius, ship.heading, false);
 
@@ -351,7 +415,12 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("resize", resize);
     canvas.removeEventListener("wheel", onWheel);
+    canvas.removeEventListener("touchstart", onTouchStart);
+    canvas.removeEventListener("touchmove", onTouchMove);
+    canvas.removeEventListener("touchend", onTouchEnd);
+    for (const fn of cleanups) fn();
     overlay.hidden = true;
+    document.body.style.overflow = prevOverflow;
     if (onExit) onExit();
   }
 

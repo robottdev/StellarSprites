@@ -24,7 +24,7 @@ const jobs = [
   ["station", "station", { seed: 13, colors: [Color.grey, Color.cyan], colorDetail: 0.02, numberOfPods: 6 }],
   ["blackhole", "blackhole", { seed: 1 }],
   ["background", "background", { seed: 21, size: 64, frequency: 0.04, lacunarity: 2, persistence: 0.5, octaves: 4, starCount: 40, tint: Color.blue, brightness: 0.6 }],
-  ["scene", "scene", { seed: 3, planetCount: 3, belt: true, station: true, blackHole: false, quality: 0, starColor: Color.yellow }],
+  ["scene", "scene", { seed: 3, planetCount: 3, beltChance: 1, station: true, blackHole: false, quality: 0, starColor: Color.yellow }],
 ];
 
 for (const [name, type, params] of jobs) {
@@ -39,6 +39,16 @@ for (const [name, type, params] of jobs) {
     assert(result.scene && result.scene.planets.length >= 3, "scene missing planets");
     assert(result.scene.sprites.length > 4, "scene missing sprites");
     assert(result.scene.sun && result.scene.player, "scene missing star or ship");
+    assert(result.scene.belt && result.scene.belt.rocks.length, "scene missing belt at 100% chance");
+    for (const p of result.scene.planets) {
+      assert(Number.isFinite(p.x) && Number.isFinite(p.y), "planet missing fixed position");
+      assert(p.orbitRadius == null, "planet should not use solar orbits");
+      for (const m of p.moons) {
+        assert(m.orbitRadius > 0 && m.orbitSpeed > 0, "moon missing local orbit");
+      }
+    }
+    const emptyBelt = generateSprite("scene", { seed: 3, planetCount: 3, beltChance: 0, station: true, blackHole: false, quality: 0, starColor: Color.yellow });
+    assert(!emptyBelt.scene.belt, "belt chance 0 still spawned a belt");
   }
 }
 
