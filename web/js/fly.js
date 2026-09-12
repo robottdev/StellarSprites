@@ -151,7 +151,7 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     };
   }
 
-  function drawSprite(ctx, spriteIndex, x, y, radius, rotation, lightFromSun) {
+  function drawSprite(ctx, spriteIndex, x, y, radius, rotation, lightFromSun, clipCircle) {
     const img = sprites[spriteIndex];
     if (!img) return;
     const p = worldToScreen(x, y, ctx);
@@ -163,6 +163,11 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
       rot = Math.atan2(y, x);
     }
     ctx.rotate(rot);
+    if (clipCircle) {
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.48, 0, Math.PI * 2);
+      ctx.clip();
+    }
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
   }
@@ -289,7 +294,17 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
     }
     ctx.restore();
 
-    drawSprite(ctx, scene.sun.spriteIndex, 0, 0, scene.sun.radius, 0, false);
+    const sunScreen = worldToScreen(0, 0, ctx);
+    const glowR = scene.sun.radius * 2.4 * camera.zoom;
+    const glow = ctx.createRadialGradient(sunScreen.x, sunScreen.y, glowR * 0.18, sunScreen.x, sunScreen.y, glowR);
+    glow.addColorStop(0, "rgba(255, 230, 170, 0.28)");
+    glow.addColorStop(0.45, "rgba(255, 180, 80, 0.1)");
+    glow.addColorStop(1, "rgba(255, 140, 40, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sunScreen.x, sunScreen.y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    drawSprite(ctx, scene.sun.spriteIndex, 0, 0, scene.sun.radius, 0, false, true);
 
     if (hole) {
       const hp = bodyPos(hole.orbitRadius, hole.phase);
