@@ -12,7 +12,7 @@ const TYPES = [
   { id: "background", label: "Background" },
 ];
 
-const SHIP_TYPES = ["Fighter", "Fighter 2", "Hauler", "Saucer"];
+const SHIP_TYPES = ["Interceptor", "Gunship", "Hauler", "Carrier"];
 const PLANET_TYPES = ["Gas Giant", "Terrestrial"];
 const FILTER_MODES = ["Point", "Bilinear", "Trilinear"];
 
