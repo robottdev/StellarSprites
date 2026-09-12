@@ -1,0 +1,6 @@
+# This repo is mostly Unity C#. Force a static Python file server so
+# Railway/Railpack does not try to build .NET and hang.
+providers = ["python"]
+
+[start]
+cmd = "python -m http.server --bind 0.0.0.0 ${PORT:-8080}"
