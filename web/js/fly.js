@@ -253,14 +253,19 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit 
 
     const ctx = canvas.getContext("2d");
         const bg = sprites[scene.background.spriteIndex];
-        const tile = Math.max(canvas.width, canvas.height) * 0.92;
-        const parX = ((-camera.x * 0.06) % tile + tile) % tile;
-        const parY = ((-camera.y * 0.06) % tile + tile) % tile;
-        for (let y = -tile; y < canvas.height + tile; y += tile) {
-          for (let x = -tile; x < canvas.width + tile; x += tile) {
-            ctx.drawImage(bg, x + parX, y + parY, tile, tile);
-          }
-        }
+        const bw = canvas.width * 1.45;
+        const bh = canvas.height * 1.45;
+        const maxX = (bw - canvas.width) / 2 - 4;
+        const maxY = (bh - canvas.height) / 2 - 4;
+        const ox = Math.max(-maxX, Math.min(maxX, camera.x * 0.035));
+        const oy = Math.max(-maxY, Math.min(maxY, camera.y * 0.035));
+        ctx.drawImage(
+          bg,
+          canvas.width / 2 - bw / 2 - ox,
+          canvas.height / 2 - bh / 2 - oy,
+          bw,
+          bh
+        );
 
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);

@@ -52,7 +52,7 @@ function qualitySizes(quality) {
     };
   }
   return {
-    sun: 128, planet: 96, moon: 56, asteroid: 40, station: 128,
+    sun: 192, planet: 96, moon: 56, asteroid: 40, station: 128,
     ship: 128, bg: 256, map: 512, hole: 256,
   };
 }
