@@ -99,6 +99,26 @@ export function drawPolygon(tex, points, color, thickness = 1) {
   }
 }
 
+export function fillDisc(tex, cx, cy, radius, color) {
+  stamp(tex, cx | 0, cy | 0, color, Math.max(0, radius));
+}
+
+export function fillEllipse(tex, cx, cy, rx, ry, color) {
+  const x0 = Math.max(0, Math.floor(cx - rx - 1));
+  const x1 = Math.min(tex.width - 1, Math.ceil(cx + rx + 1));
+  const y0 = Math.max(0, Math.floor(cy - ry - 1));
+  const y1 = Math.min(tex.height - 1, Math.ceil(cy + ry + 1));
+  const rx2 = Math.max(0.25, rx * rx);
+  const ry2 = Math.max(0.25, ry * ry);
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      if ((dx * dx) / rx2 + (dy * dy) / ry2 <= 1.02) tex.setPixel(x, y, color);
+    }
+  }
+}
+
 export function fillRect(tex, x, y, w, h, color) {
   const x1 = Math.min(tex.width, x + w);
   const y1 = Math.min(tex.height, y + h);
