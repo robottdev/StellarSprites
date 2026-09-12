@@ -259,6 +259,10 @@ input[type="range"] { width: 100%; }
   color: var(--accent);
 }
 
+.generating[hidden] {
+  display: none !important;
+}
+
 .preview-footer {
   display: flex;
   justify-content: space-between;
