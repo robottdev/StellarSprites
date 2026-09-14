@@ -1,12 +1,12 @@
 import {
   Color, SpriteTexture, SS_Random, clamp, clamp01, mixColor, hash2,
   unityRandomInt, unityRandomFloat,
-} from "./core.js";
-import { fillPolygon, fillRect, fillDisc, fillEllipse, drawLine } from "./raster.js";
+} from "./core.js?v=a14";
+import { fillPolygon, fillRect, fillDisc, fillEllipse, drawLine } from "./raster.js?v=a14";
 import {
   n01, makeLight, lambert, specular, rimLight, perturbNormal, stampGlow, heatColor,
-} from "./lighting.js";
-import { Perlin, QualityMode } from "./libnoise.js";
+} from "./lighting.js?v=a14";
+import { Perlin, QualityMode } from "./libnoise.js?v=a14";
 
 export const ShipType = { Fighter: 0, Fighter2: 1, Hauler: 2, Saucer: 3 };
 

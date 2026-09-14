@@ -3,4 +3,4 @@
 providers = ["python"]
 
 [start]
-cmd = "python -m http.server --bind 0.0.0.0 ${PORT:-8080}"
+cmd = "python serve.py"

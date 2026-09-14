@@ -1,4 +1,4 @@
-import { generateSprite } from "./generate.js";
+import { generateSprite } from "./generate.js?v=a14";
 
 self.onmessage = (event) => {
   const { id, type, params } = event.data;
