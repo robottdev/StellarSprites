@@ -1,12 +1,12 @@
-import { Perlin, Voronoi, QualityMode } from "./libnoise.js?v=a15";
+import { Perlin, Voronoi, QualityMode } from "./libnoise.js?v=a16";
 import {
   Color, SpriteTexture, SS_Random, clamp, clamp01, hash2, mergeColors, outline,
   unityRandomInt, unityRandomFloat,
-} from "./core.js?v=a15";
-import { fillPolygon, drawPolygon, fillRect } from "./raster.js?v=a15";
-import { stampGlow } from "./lighting.js?v=a15";
+} from "./core.js?v=a16";
+import { fillPolygon, drawPolygon, fillRect } from "./raster.js?v=a16";
+import { stampGlow } from "./lighting.js?v=a16";
 
-export { ShipType, generateShip, randomizeShip } from "./ship.js?v=a15";
+export { ShipType, generateShip, randomizeShip } from "./ship.js?v=a16";
 
 function shadeEdge(spriteTexture) {
   const w = spriteTexture.width;
