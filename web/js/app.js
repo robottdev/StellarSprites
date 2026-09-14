@@ -1,6 +1,6 @@
-import { Color } from "./core.js?v=a15";
-import { randomize } from "./generate.js?v=a15";
-import { startFlyMode } from "./fly.js?v=a15";
+import { Color } from "./core.js?v=a16";
+import { randomize } from "./generate.js?v=a16";
+import { startFlyMode } from "./fly.js?v=a16";
 
 const TYPES = [
   { id: "ship", label: "Ship" },
@@ -48,7 +48,7 @@ function defaultStates() {
       customLighting: false, lightAngle: 180,
     },
     sun: {
-      availableSizes: [256, 512],
+      availableSizes: [256, 512, 768],
       availableColors: [Color.red, Color.white, Color.blue, Color.yellow],
       customSeed: false, seed: 0,
       customSize: false, size: 512,
@@ -141,7 +141,7 @@ const els = {
 
 function getWorker() {
   if (!worker) {
-    worker = new Worker(new URL("./worker.js?v=a15", import.meta.url), { type: "module" });
+    worker = new Worker(new URL("./worker.js?v=a16", import.meta.url), { type: "module" });
     worker.onmessage = onWorkerMessage;
     worker.onerror = (e) => {
       setBusy(false);

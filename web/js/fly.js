@@ -396,7 +396,9 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit,
     }
 
     const sunScreen = worldToScreen(0, 0, ctx);
-    const glowR = scene.sun.radius * 2.4 * camera.zoom;
+    const diskRatio = scene.sun.diskRatio || 0.22;
+    const sunSpriteR = scene.sun.radius / (2 * diskRatio);
+    const glowR = sunSpriteR * 1.2 * camera.zoom;
     const glow = ctx.createRadialGradient(sunScreen.x, sunScreen.y, glowR * 0.18, sunScreen.x, sunScreen.y, glowR);
     glow.addColorStop(0, "rgba(255, 230, 170, 0.28)");
     glow.addColorStop(0.45, "rgba(255, 180, 80, 0.1)");
@@ -405,7 +407,7 @@ export function startFlyMode({ scene, overlay, canvas, readout, minimap, onExit,
     ctx.beginPath();
     ctx.arc(sunScreen.x, sunScreen.y, glowR, 0, Math.PI * 2);
     ctx.fill();
-    drawSprite(ctx, scene.sun.spriteIndex, 0, 0, scene.sun.radius, 0, false, true);
+    drawSprite(ctx, scene.sun.spriteIndex, 0, 0, sunSpriteR, 0, false, false);
 
     if (hole) drawSprite(ctx, hole.spriteIndex, hole.x, hole.y, hole.radius, 0, false);
     for (const r of rocks) {

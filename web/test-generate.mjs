@@ -35,10 +35,43 @@ for (const [name, type, params] of jobs) {
   console.log(`${name}: ${result.width}x${result.height} coverage=${cov.toFixed(3)} ${dt}ms`);
   assert(result.width > 0 && result.height > 0, name + " empty size");
   assert(cov > 0.01, name + " looks empty");
+  if (type === "sun") {
+    const w = result.width;
+    const h = result.height;
+    const px = result.pixels;
+    const alpha = (x, y) => px[(y * w + x) * 4 + 3];
+    const corner = Math.max(alpha(0, 0), alpha(w - 1, 0), alpha(0, h - 1), alpha(w - 1, h - 1));
+    assert(corner < 12, name + " corona clips at canvas corner: " + corner);
+  }
+  if (type === "background") {
+    const w = result.width;
+    const h = result.height;
+    const px = result.pixels;
+    const jump = (xa, ya, xb, yb) => {
+      const ia = (ya * w + xa) * 4;
+      const ib = (yb * w + xb) * 4;
+      return Math.abs(px[ia] - px[ib]) + Math.abs(px[ia + 1] - px[ib + 1]) + Math.abs(px[ia + 2] - px[ib + 2]);
+    };
+    let wrap = 0;
+    for (let y = 0; y < h; y++) wrap += jump(0, y, w - 1, y);
+    for (let x = 0; x < w; x++) wrap += jump(x, 0, x, h - 1);
+    wrap /= (h + w);
+    let neighbor = 0;
+    let n = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w - 1; x++) {
+        neighbor += jump(x, y, x + 1, y);
+        n++;
+      }
+    }
+    neighbor /= n;
+    assert(wrap <= neighbor * 6 + 24, name + " tiles with a visible seam: wrap=" + wrap.toFixed(1) + " neighbor=" + neighbor.toFixed(1));
+  }
   if (type === "scene") {
     assert(result.scene && result.scene.planets.length >= 3, "scene missing planets");
     assert(result.scene.sprites.length > 4, "scene missing sprites");
     assert(result.scene.sun && result.scene.player, "scene missing star or ship");
+    assert(result.scene.sun.diskRatio > 0 && result.scene.sun.diskRatio < 0.4, "sun disk ratio should leave corona room");
     assert(result.scene.belt && result.scene.belt.rocks.length, "scene missing belt at 100% chance");
     for (const p of result.scene.planets) {
       assert(Number.isFinite(p.x) && Number.isFinite(p.y), "planet missing fixed position");

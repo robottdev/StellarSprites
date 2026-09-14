@@ -1,15 +1,18 @@
-import { Perlin, Voronoi, RidgedMultifractal, QualityMode } from "./libnoise.js?v=a15";
+import { Perlin, Voronoi, RidgedMultifractal, QualityMode } from "./libnoise.js?v=a16";
 import {
-  Color, SpriteTexture, SS_Random, clamp, clamp01, mixColor, overColor, sampleStops,
+  Color, SpriteTexture, SS_Random, clamp, clamp01, lerp, mixColor, overColor, sampleStops,
   generateColorWheelColors, unityRandomInt, unityRandomFloat, pick, hash2,
-} from "./core.js?v=a15";
+} from "./core.js?v=a16";
 import {
   n01, sphereAt, makeLight, lambert, specular, rimLight, perturbNormal,
   shadeRgb, heatColor, makeCraters, craterHeight, stampGlow, atmosphereAlpha,
   diskCoverage,
-} from "./lighting.js?v=a15";
+} from "./lighting.js?v=a16";
 
 export const PlanetType = { Gas_Giant: 0, Terrestrial: 1 };
+
+/** Photosphere radius as a fraction of the texture. Leaves room for corona to fade before the edge. */
+export const SUN_DISK_RATIO = 0.22;
 
 function rockGrey(c) {
   const y = clamp01(0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
@@ -222,9 +225,11 @@ export function generateSun(params) {
   const flare = new Perlin(1.35, 2.2, 0.5, 4, seed + 4, QualityMode.Low);
   const corona = new Perlin(1.05, 2.05, 0.55, 4, seed + 8, QualityMode.Low);
   const spotNoise = new Perlin(2.8, 2.1, 0.45, 3, seed + 12, QualityMode.Low);
-  const radius = size * 0.32;
+  const radius = size * SUN_DISK_RATIO;
   const cx = size / 2;
   const cy = size / 2;
+  const maxRay = size * 0.5 - 1.25;
+  const coronaLen = Math.max(2, maxRay - radius);
   const tex = new SpriteTexture(size, size);
   const hot = mixColor(Color.white, mainColor, 0.18);
   const mid = mainColor.clone();
@@ -239,14 +244,14 @@ export function generateSun(params) {
       const ang = Math.atan2(dy, dx);
       let pixel = new Color(0, 0, 0, 0);
 
-      const coronaLen = radius * 1.15;
-      if (dist > radius * 0.92 && dist < radius + coronaLen) {
+      if (dist > radius * 0.92 && dist < maxRay) {
         const radial = clamp01((dist - radius) / coronaLen);
         const streak = n01(corona, Math.cos(ang * 4) * 5, Math.sin(ang * 4) * 5, radial * 7);
         const flareN = n01(flare, Math.cos(ang) * 2.6, Math.sin(ang) * 2.6, 0);
         const prominence = Math.pow(Math.max(0, streak - 0.62) * 2.4, 1.6) * (1 - radial);
-        const wisps = Math.pow(1 - radial, 2.05) * (0.22 + 0.78 * streak) * (0.4 + 0.6 * flareN);
-        const a = clamp01(wisps + prominence * 0.85);
+        const wisps = Math.pow(1 - radial, 1.85) * (0.22 + 0.78 * streak) * (0.4 + 0.6 * flareN);
+        const edgeFade = clamp01((maxRay - dist) / Math.max(2.5, size * 0.045));
+        const a = clamp01(wisps + prominence * 0.85) * edgeFade;
         const col = mixColor(mainColor, Color.white, 0.35 + 0.5 * (1 - radial) + prominence * 0.4);
         pixel = new Color(col.r, col.g, col.b, a);
       }
@@ -575,6 +580,30 @@ function wrapCoord(v, max) {
   return ((v % max) + max) % max;
 }
 
+/** Four-corner blend so non-periodic libnoise tiles without a hard seam. */
+function seamlessNoise(sample, x, y, width, height) {
+  const wx = x / width;
+  const wy = y / height;
+  return lerp(
+    lerp(sample(x, y), sample(x - width, y), wx),
+    lerp(sample(x, y - height), sample(x - width, y - height), wx),
+    wy
+  );
+}
+
+function stampGlowWrapped(tex, cx, cy, radius, color) {
+  const width = tex.width;
+  const height = tex.height;
+  for (const ox of [0, -width, width]) {
+    for (const oy of [0, -height, height]) {
+      const px = cx + ox;
+      const py = cy + oy;
+      if (px + radius < 0 || py + radius < 0 || px - radius >= width || py - radius >= height) continue;
+      stampGlow(tex, px, py, radius, color);
+    }
+  }
+}
+
 export function generateBackground(params) {
   const { seed, width, height, frequency, lacunarity, persistence, octaves, starCount, tint, brightness } = params;
   const random = new SS_Random(seed);
@@ -593,10 +622,10 @@ export function generateBackground(params) {
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const n1 = clamp01((nebula.getValue(x, 0, y) + 1) * 0.5);
-      const n2 = clamp01((nebula2.getValue(x * 0.72, 4, y * 0.72) + 1) * 0.5);
-      const n3 = clamp01((veins.getValue(x, y, 0) + 1) * 0.5);
-      const d = clamp01((dust.getValue(x, y, 0) + 1) * 0.5);
+      const n1 = clamp01((seamlessNoise((px, py) => nebula.getValue(px, 0, py), x, y, width, height) + 1) * 0.5);
+      const n2 = clamp01((seamlessNoise((px, py) => nebula2.getValue(px * 0.72, 4, py * 0.72), x, y, width, height) + 1) * 0.5);
+      const n3 = clamp01((seamlessNoise((px, py) => veins.getValue(px, py, 0), x, y, width, height) + 1) * 0.5);
+      const d = clamp01((seamlessNoise((px, py) => dust.getValue(px, py, 0), x, y, width, height) + 1) * 0.5);
       const blob = Math.pow(n1, 1.35);
       let col = mixColor(new Color(0.012, 0.016, 0.045, 1), tint, blob * brightness);
       col = mixColor(col, accent, Math.pow(n2, 1.6) * brightness * 0.5);
@@ -636,11 +665,7 @@ export function generateBackground(params) {
     if (mag > 0.55) {
       const glowR = 1.2 + mag * 2.0;
       const glowCol = new Color(col.r, col.g, col.b, 0.38 * mag);
-      stampGlow(tex, x, y, glowR, glowCol);
-      if (x < glowR) stampGlow(tex, x + width, y, glowR, glowCol);
-      if (x > width - glowR) stampGlow(tex, x - width, y, glowR, glowCol);
-      if (y < glowR) stampGlow(tex, x, y + height, glowR, glowCol);
-      if (y > height - glowR) stampGlow(tex, x, y - height, glowR, glowCol);
+      stampGlowWrapped(tex, x, y, glowR, glowCol);
     }
     if (mag > 0.86) {
       const spike = 0.42 * mag;

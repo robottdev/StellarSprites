@@ -1,12 +1,12 @@
 import {
   Color, SpriteTexture, SS_Random, clamp, mixColor, overColor,
   hsvToRgb, unityRandomInt,
-} from "./core.js?v=a15";
+} from "./core.js?v=a16";
 import {
   generatePlanet, generateSun, generateMoon, generateAsteroid, generateBlackhole,
-  generateBackground, PlanetType,
-} from "./celestial.js?v=a15";
-import { generateShip, generateStation } from "./craft.js?v=a15";
+  generateBackground, PlanetType, SUN_DISK_RATIO,
+} from "./celestial.js?v=a16";
+import { generateShip, generateStation } from "./craft.js?v=a16";
 
 const STAR_PALETTE = [
   new Color(1, 0.92, 0.55, 1),
@@ -47,12 +47,12 @@ function bodyName(random, prefix) {
 function qualitySizes(quality) {
   if (quality < 0.5) {
     return {
-      sun: 48, planet: 32, moon: 24, asteroid: 48, station: 48,
+      sun: 96, planet: 32, moon: 24, asteroid: 48, station: 48,
       ship: 64, bg: 64, map: 256, hole: 64,
     };
   }
   return {
-    sun: 192, planet: 512, moon: 56, asteroid: 96, station: 128,
+    sun: 512, planet: 512, moon: 56, asteroid: 96, station: 128,
     ship: 128, bg: 2048, map: 512, hole: 256,
   };
 }
@@ -335,7 +335,7 @@ export function generateSolarSystem(params) {
     }
   }
 
-  blitCentered(map, sunTex, mcx, mcy, Math.max(28, sunRadius * mapScale * 2.4));
+  blitCentered(map, sunTex, mcx, mcy, Math.max(36, (sunRadius * mapScale) / SUN_DISK_RATIO));
   for (const p of planets) {
     const ptex = textureFromPack(sprites[p.spriteIndex]);
     const x = mcx + p.x * mapScale;
@@ -364,7 +364,13 @@ export function generateSolarSystem(params) {
     starName,
     worldRadius,
     background: { spriteIndex: bgSprite, width: sizes.bg, height: sizes.bg },
-    sun: { name: starName, spriteIndex: sunSprite, radius: sunRadius, color: { r: starColor.r, g: starColor.g, b: starColor.b } },
+    sun: {
+      name: starName,
+      spriteIndex: sunSprite,
+      radius: sunRadius,
+      diskRatio: SUN_DISK_RATIO,
+      color: { r: starColor.r, g: starColor.g, b: starColor.b },
+    },
     planets,
     belt: includeBelt ? { inner: beltInner, outer: beltOuter, rocks } : null,
     station,

@@ -6,6 +6,6 @@ COPY serve.py /app/serve.py
 COPY web /app/web
 
 # Bust stale image layers when JS changes.
-ENV STELLAR_SPRITES_BUILD=a15
+ENV STELLAR_SPRITES_BUILD=a16
 
 CMD ["python", "/app/serve.py"]
