@@ -52,8 +52,8 @@ function qualitySizes(quality) {
     };
   }
   return {
-    sun: 192, planet: 96, moon: 56, asteroid: 96, station: 128,
-    ship: 128, bg: 256, map: 512, hole: 256,
+    sun: 192, planet: 512, moon: 56, asteroid: 40, station: 128,
+    ship: 128, bg: 2048, map: 512, hole: 256,
   };
 }
 
@@ -136,11 +136,11 @@ export function generateSolarSystem(params) {
     seed: seed + 19,
     width: sizes.bg,
     height: sizes.bg,
-    frequency: 0.018,
+    frequency: 0.018 * (256 / Math.max(64, sizes.bg)),
     lacunarity: 2.1,
     persistence: 0.48,
     octaves: quality < 0.5 ? 3 : 5,
-    starCount: quality < 0.5 ? 40 : 220,
+    starCount: quality < 0.5 ? 40 : Math.min(900, Math.round(0.00017 * sizes.bg * sizes.bg)),
     tint: mixColor(starColor, new Color(0.16, 0.22, 0.48, 1), 0.62),
     brightness: 0.42,
   });
