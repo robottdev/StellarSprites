@@ -217,8 +217,8 @@ export function generateSolarSystem(params) {
     const unique = quality < 0.5 ? 2 : 4;
     for (let a = 0; a < unique; a++) {
       const aColors = paletteFromSeed(seed + 800 + a * 9).map((c, i) => {
-        const grey = 0.36 + i * 0.14;
-        return mixColor(new Color(grey, grey * 0.97, grey * 0.92), c, 0.18);
+        const grey = 0.38 + i * 0.12;
+        return mixColor(new Color(grey, grey * 0.97, grey * 0.9), c, 0.1);
       });
       const aTex = generateAsteroid({
         seed: seed + 800 + a * 9,

@@ -313,10 +313,10 @@ export function generateMoon(params) {
 
 export function generateAsteroid(params) {
   const { seed, size, colors, minerals, mineralColor, lightAngle } = params;
-  const rock = new Perlin(1.7, 2.0, 0.48, 4, seed, QualityMode.Medium);
-  const shape = new Perlin(0.78, 2.05, 0.46, 3, seed + 2, QualityMode.Low);
-  const fine = new Perlin(6.4, 2.0, 0.36, 3, seed + 6, QualityMode.Low);
-  const patch = new Perlin(1.05, 2.1, 0.5, 3, seed + 9, QualityMode.Low);
+  const rock = new Perlin(1.35, 2.0, 0.46, 4, seed, QualityMode.Medium);
+  const shape = new Perlin(0.55, 2.05, 0.42, 3, seed + 2, QualityMode.Low);
+  const fine = new Perlin(4.2, 2.0, 0.32, 2, seed + 6, QualityMode.Low);
+  const patch = new Perlin(0.62, 2.1, 0.48, 3, seed + 9, QualityMode.Low);
   const random = new SS_Random(seed);
   const cx = size / 2;
   const cy = size / 2;
@@ -326,16 +326,19 @@ export function generateAsteroid(params) {
   const cosR = Math.cos(rot);
   const sinR = Math.sin(rot);
   const lobeN = 2 + (random.range(0, 2) | 0);
-  const lobeAmp = 0.07 + random.range(0, 0.07);
+  const lobeAmp = 0.07 + random.range(0, 0.06);
   const lobePhase = random.range(0, Math.PI * 2);
-  const dentAmp = 0.09 + random.range(0, 0.08);
+  const lobeAmp2 = 0.03 + random.range(0, 0.04);
+  const lobePhase2 = random.range(0, Math.PI * 2);
+  const dentAmp = 0.035 + random.range(0, 0.03);
   const light = makeLight(lightAngle, 0.5);
-  const craters = makeCraters(random, 5 + random.range(0, 6), baseR * 0.9);
+  const craters = makeCraters(random, 4 + random.range(0, 5), baseR * 0.92);
+  const stain = mixColor(mineralColor || Color.yellow, mixColor(colors[0], Color.white, 0.08), 0.35);
   const palette = [
-    mixColor(colors[0], Color.black, 0.4),
+    mixColor(colors[0], Color.black, 0.42),
     colors[0],
     colors[1] || colors[0],
-    mixColor(colors[2] || colors[1] || colors[0], Color.white, 0.14),
+    mixColor(colors[2] || colors[1] || colors[0], Color.white, 0.12),
   ];
   const tex = new SpriteTexture(size, size);
 
@@ -350,8 +353,9 @@ export function generateAsteroid(params) {
 
   function radiusAt(lx, ly) {
     const ang = Math.atan2(ly, lx);
-    const n = n01(shape, Math.cos(ang) * 1.05, Math.sin(ang) * 1.05, 0.15);
-    const lobe = Math.sin(ang * lobeN + lobePhase) * lobeAmp;
+    const n = n01(shape, Math.cos(ang) * 0.7, Math.sin(ang) * 0.7, 0.1);
+    const lobe = Math.sin(ang * lobeN + lobePhase) * lobeAmp
+      + Math.sin(ang * 2 + lobePhase2) * lobeAmp2;
     const dent = (n - 0.5) * 2 * dentAmp;
     return baseR * (1 + lobe + dent);
   }
@@ -367,37 +371,35 @@ export function generateAsteroid(params) {
       if (r2 >= 1) continue;
       const sph = { nx, ny, nz: Math.sqrt(Math.max(0, 1 - r2)), r2 };
 
-      const h0 = n01(rock, sph.nx * 2.35, sph.ny * 2.35, sph.nz * 2.35);
-      const grain = n01(fine, sph.nx * 9.5, sph.ny * 9.5, sph.nz * 9.5);
-      const mareN = n01(patch, sph.nx * 1.2, sph.ny * 1.2, sph.nz * 1.2);
+      const h0 = n01(rock, sph.nx * 2.1, sph.ny * 2.1, sph.nz * 2.1);
+      const grain = n01(fine, sph.nx * 6.8, sph.ny * 6.8, sph.nz * 6.8);
+      const mareN = n01(patch, sph.nx * 0.9, sph.ny * 0.9, sph.nz * 0.9);
       const c0 = craterHeight(lx, ly, craters);
       const cdx = craterHeight(lx + 1, ly, craters);
       const cdy = craterHeight(lx, ly + 1, craters);
-      let albedo = sampleStops(palette, clamp01(h0 * 0.58 + grain * 0.14 + 0.12));
-      if (mareN > 0.6) {
-        albedo = mixColor(albedo, mixColor(colors[0], Color.black, 0.34), clamp01((mareN - 0.6) * 1.7));
+      let albedo = sampleStops(palette, clamp01(h0 * 0.6 + grain * 0.12 + 0.12));
+      if (mareN > 0.58) {
+        albedo = mixColor(albedo, mixColor(colors[0], Color.black, 0.36), clamp01((mareN - 0.58) * 1.6));
       }
       albedo = mixColor(albedo, mixColor(albedo, Color.black, 0.45), clamp01(-c0 * 0.85));
       albedo = mixColor(albedo, mixColor(albedo, Color.white, 0.22), clamp01(c0 * 0.5));
       if (minerals) {
-        const m = n01(patch, sph.nx * 1.55, sph.ny * 1.55, sph.nz * 1.55 + 2);
-        if (m > 0.74) {
-          albedo = mixColor(albedo, mineralColor, clamp01((m - 0.74) * 1.35) * 0.38);
+        const m = n01(patch, sph.nx * 0.7, sph.ny * 0.7, sph.nz * 0.7 + 1.8);
+        if (m > 0.72) {
+          albedo = mixColor(albedo, stain, clamp01((m - 0.72) * 2.1) * 0.28);
         }
       }
       albedo.a = 1;
 
-      const shapeDx = (radiusAt(lx - 1, ly) - radiusAt(lx + 1, ly)) / Math.max(8, rad) * 0.9;
-      const shapeDy = (radiusAt(lx, ly - 1) - radiusAt(lx, ly + 1)) / Math.max(8, rad) * 0.9;
       const n = perturbNormal(
         sph,
-        h0 * 0.18 + grain * 0.08 + (c0 - cdx) + shapeDx,
-        h0 * 0.18 + (c0 - cdy) + shapeDy,
+        h0 * 0.16 + grain * 0.04 + (c0 - cdx),
+        h0 * 0.16 + (c0 - cdy),
         1.0
       );
       const ndl = n.nx * light.x + n.ny * light.y + n.nz * light.z;
       const earthshine = 0.05 * clamp01(0.35 - ndl);
-      const shine = minerals ? specular(n, light, 70, 0.08) : specular(n, light, 110, 0.045);
+      const shine = specular(n, light, 110, minerals ? 0.055 : 0.045);
       const pixel = shadeRgb(albedo, lambert(n, light, 0.04, 0.1) + earthshine, rimLight(n, light, 3.1) * 0.16, shine);
       pixel.a = diskCoverage(dist, rad);
       tex.setPixel(x, y, pixel);
@@ -622,8 +624,8 @@ export function randomizeAsteroid(state) {
   if (!next.customColors) {
     const raw = generateColorWheelColors(next.seed, 3);
     next.colors = raw.map((c, i) => {
-      const grey = 0.34 + i * 0.15;
-      return mixColor(new Color(grey, grey * 0.97, grey * 0.92), c, 0.2);
+      const grey = 0.38 + i * 0.12;
+      return mixColor(new Color(grey, grey * 0.97, grey * 0.9), c, 0.1);
     });
   }
   if (!next.customMinerals) next.minerals = unityRandomInt(0, 5) > 2;
