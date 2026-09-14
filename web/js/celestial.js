@@ -1,13 +1,13 @@
-import { Perlin, Voronoi, RidgedMultifractal, QualityMode } from "./libnoise.js";
+import { Perlin, Voronoi, RidgedMultifractal, QualityMode } from "./libnoise.js?v=a14";
 import {
   Color, SpriteTexture, SS_Random, clamp, clamp01, mixColor, overColor, sampleStops,
   generateColorWheelColors, unityRandomInt, unityRandomFloat, pick, hash2,
-} from "./core.js";
+} from "./core.js?v=a14";
 import {
   n01, sphereAt, makeLight, lambert, specular, rimLight, perturbNormal,
   shadeRgb, heatColor, makeCraters, craterHeight, stampGlow, atmosphereAlpha,
   diskCoverage,
-} from "./lighting.js";
+} from "./lighting.js?v=a14";
 
 export const PlanetType = { Gas_Giant: 0, Terrestrial: 1 };
 

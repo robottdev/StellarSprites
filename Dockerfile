@@ -2,6 +2,10 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 COPY index.html /app/index.html
+COPY serve.py /app/serve.py
 COPY web /app/web
 
-CMD ["sh", "-c", "python -m http.server --bind 0.0.0.0 ${PORT:-8080}"]
+# Bust stale image layers when JS changes.
+ENV STELLAR_SPRITES_BUILD=a14
+
+CMD ["python", "/app/serve.py"]

@@ -1,10 +1,10 @@
-import { Color } from "./core.js";
+import { Color } from "./core.js?v=a14";
 import {
   generatePlanet, generateSun, generateMoon, generateAsteroid, generateBlackhole, generateBackground,
   randomizePlanet, randomizeSun, randomizeMoon, randomizeAsteroid, randomizeBlackhole, randomizeBackground,
-} from "./celestial.js";
-import { generateShip, generateStation, randomizeShip, randomizeStation } from "./craft.js";
-import { generateSolarSystem, randomizeScene } from "./scene.js";
+} from "./celestial.js?v=a14";
+import { generateShip, generateStation, randomizeShip, randomizeStation } from "./craft.js?v=a14";
+import { generateSolarSystem, randomizeScene } from "./scene.js?v=a14";
 
 function reviveColor(c) {
   if (!c) return Color.white.clone();
