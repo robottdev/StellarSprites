@@ -11,6 +11,23 @@ import {
 
 export const PlanetType = { Gas_Giant: 0, Terrestrial: 1 };
 
+function rockGrey(c) {
+  const y = clamp01(0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+  return new Color(y, y * 0.99, y * 0.96);
+}
+
+function greyRockPalette(colors) {
+  const a = rockGrey(colors?.[0] || new Color(0.42, 0.42, 0.41));
+  const b = rockGrey(colors?.[1] || new Color(0.58, 0.57, 0.55));
+  const c = rockGrey(colors?.[2] || new Color(0.72, 0.71, 0.68));
+  return [
+    mixColor(a, Color.black, 0.38),
+    a,
+    b,
+    mixColor(c, Color.white, 0.06),
+  ];
+}
+
 function smooth01(t) {
   t = clamp01(t);
   return t * t * (3 - 2 * t);
@@ -317,6 +334,7 @@ export function generateAsteroid(params) {
   const shape = new Perlin(0.55, 2.05, 0.42, 3, seed + 2, QualityMode.Low);
   const fine = new Perlin(4.2, 2.0, 0.32, 2, seed + 6, QualityMode.Low);
   const patch = new Perlin(0.62, 2.1, 0.48, 3, seed + 9, QualityMode.Low);
+  const speckle = new Perlin(11.2, 2.0, 0.28, 2, seed + 11, QualityMode.Low);
   const random = new SS_Random(seed);
   const cx = size / 2;
   const cy = size / 2;
@@ -333,13 +351,8 @@ export function generateAsteroid(params) {
   const dentAmp = 0.035 + random.range(0, 0.03);
   const light = makeLight(lightAngle, 0.5);
   const craters = makeCraters(random, 4 + random.range(0, 5), baseR * 0.92);
-  const stain = mixColor(mineralColor || Color.yellow, mixColor(colors[0], Color.white, 0.08), 0.35);
-  const palette = [
-    mixColor(colors[0], Color.black, 0.42),
-    colors[0],
-    colors[1] || colors[0],
-    mixColor(colors[2] || colors[1] || colors[0], Color.white, 0.12),
-  ];
+  const ore = mineralColor || Color.yellow;
+  const palette = greyRockPalette(colors);
   const tex = new SpriteTexture(size, size);
 
   function localXY(x, y) {
@@ -379,14 +392,17 @@ export function generateAsteroid(params) {
       const cdy = craterHeight(lx, ly + 1, craters);
       let albedo = sampleStops(palette, clamp01(h0 * 0.6 + grain * 0.12 + 0.12));
       if (mareN > 0.58) {
-        albedo = mixColor(albedo, mixColor(colors[0], Color.black, 0.36), clamp01((mareN - 0.58) * 1.6));
+        albedo = mixColor(albedo, mixColor(albedo, Color.black, 0.42), clamp01((mareN - 0.58) * 1.6));
       }
       albedo = mixColor(albedo, mixColor(albedo, Color.black, 0.45), clamp01(-c0 * 0.85));
       albedo = mixColor(albedo, mixColor(albedo, Color.white, 0.22), clamp01(c0 * 0.5));
+      let mineralHit = 0;
       if (minerals) {
-        const m = n01(patch, sph.nx * 0.7, sph.ny * 0.7, sph.nz * 0.7 + 1.8);
-        if (m > 0.72) {
-          albedo = mixColor(albedo, stain, clamp01((m - 0.72) * 2.1) * 0.28);
+        const pocket = n01(patch, sph.nx * 1.85, sph.ny * 1.85, sph.nz * 1.85 + 1.8);
+        const fleck = n01(speckle, sph.nx * 13.5, sph.ny * 13.5, sph.nz * 13.5);
+        if (pocket > 0.46 && fleck > 0.835) {
+          mineralHit = clamp01((fleck - 0.835) / 0.14);
+          albedo = mixColor(albedo, ore, 0.68 + mineralHit * 0.28);
         }
       }
       albedo.a = 1;
@@ -399,7 +415,7 @@ export function generateAsteroid(params) {
       );
       const ndl = n.nx * light.x + n.ny * light.y + n.nz * light.z;
       const earthshine = 0.05 * clamp01(0.35 - ndl);
-      const shine = specular(n, light, 110, minerals ? 0.055 : 0.045);
+      const shine = specular(n, light, mineralHit > 0 ? 42 : 110, mineralHit > 0 ? 0.2 : 0.045);
       const pixel = shadeRgb(albedo, lambert(n, light, 0.04, 0.1) + earthshine, rimLight(n, light, 3.1) * 0.16, shine);
       pixel.a = diskCoverage(dist, rad);
       tex.setPixel(x, y, pixel);
@@ -637,11 +653,12 @@ export function randomizeAsteroid(state) {
   if (!next.customSize) next.size = pick(next.availableSizes);
   if (!next.customScale) next.scale = unityRandomFloat(1, 2);
   if (!next.customColors) {
-    const raw = generateColorWheelColors(next.seed, 3);
-    next.colors = raw.map((c, i) => {
-      const grey = 0.38 + i * 0.12;
-      return mixColor(new Color(grey, grey * 0.97, grey * 0.9), c, 0.1);
-    });
+    const d = ((next.seed % 17) / 17 - 0.5) * 0.08;
+    next.colors = [
+      new Color(0.40 + d, 0.40 + d, 0.39 + d),
+      new Color(0.56 + d, 0.55 + d, 0.53 + d),
+      new Color(0.72 + d, 0.71 + d, 0.68 + d),
+    ];
   }
   if (!next.customMinerals) next.minerals = unityRandomInt(0, 5) > 2;
   if (!next.customMineralColor) next.mineralColor = pick(next.availableMineralColors);

@@ -52,7 +52,7 @@ function qualitySizes(quality) {
     };
   }
   return {
-    sun: 192, planet: 512, moon: 56, asteroid: 40, station: 128,
+    sun: 192, planet: 512, moon: 56, asteroid: 96, station: 128,
     ship: 128, bg: 2048, map: 512, hole: 256,
   };
 }
@@ -216,16 +216,24 @@ export function generateSolarSystem(params) {
   if (includeBelt && beltOuter > beltInner) {
     const unique = quality < 0.5 ? 2 : 4;
     for (let a = 0; a < unique; a++) {
-      const aColors = paletteFromSeed(seed + 800 + a * 9).map((c, i) => {
-        const grey = 0.38 + i * 0.12;
-        return mixColor(new Color(grey, grey * 0.97, grey * 0.9), c, 0.1);
-      });
+      const shade = 0.08 * (a - 1);
+      const aColors = [
+        new Color(0.40 + shade, 0.40 + shade, 0.39 + shade),
+        new Color(0.56 + shade, 0.55 + shade, 0.53 + shade),
+        new Color(0.72 + shade, 0.71 + shade, 0.68 + shade),
+      ];
+      const mineralColors = [
+        new Color(0.92, 0.74, 0.18, 1),
+        new Color(0.82, 0.22, 0.16, 1),
+        new Color(0.25, 0.72, 0.78, 1),
+        new Color(0.88, 0.55, 0.18, 1),
+      ];
       const aTex = generateAsteroid({
         seed: seed + 800 + a * 9,
         size: sizes.asteroid,
         colors: aColors,
         minerals: a % 2 === 0,
-        mineralColor: new Color(0.85, 0.7, 0.2, 1),
+        mineralColor: mineralColors[a % mineralColors.length],
         lightAngle,
       });
       asteroids.push(pushSprite(aTex));
