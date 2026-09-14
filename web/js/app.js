@@ -1,6 +1,6 @@
-import { Color } from "./core.js?v=a14";
-import { randomize } from "./generate.js?v=a14";
-import { startFlyMode } from "./fly.js?v=a14";
+import { Color } from "./core.js?v=a15";
+import { randomize } from "./generate.js?v=a15";
+import { startFlyMode } from "./fly.js?v=a15";
 
 const TYPES = [
   { id: "ship", label: "Ship" },
@@ -141,7 +141,7 @@ const els = {
 
 function getWorker() {
   if (!worker) {
-    worker = new Worker(new URL("./worker.js?v=a14", import.meta.url), { type: "module" });
+    worker = new Worker(new URL("./worker.js?v=a15", import.meta.url), { type: "module" });
     worker.onmessage = onWorkerMessage;
     worker.onerror = (e) => {
       setBusy(false);

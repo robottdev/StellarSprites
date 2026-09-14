@@ -1,13 +1,13 @@
-import { Perlin, Voronoi, RidgedMultifractal, QualityMode } from "./libnoise.js?v=a14";
+import { Perlin, Voronoi, RidgedMultifractal, QualityMode } from "./libnoise.js?v=a15";
 import {
   Color, SpriteTexture, SS_Random, clamp, clamp01, mixColor, overColor, sampleStops,
   generateColorWheelColors, unityRandomInt, unityRandomFloat, pick, hash2,
-} from "./core.js?v=a14";
+} from "./core.js?v=a15";
 import {
   n01, sphereAt, makeLight, lambert, specular, rimLight, perturbNormal,
   shadeRgb, heatColor, makeCraters, craterHeight, stampGlow, atmosphereAlpha,
   diskCoverage,
-} from "./lighting.js?v=a14";
+} from "./lighting.js?v=a15";
 
 export const PlanetType = { Gas_Giant: 0, Terrestrial: 1 };
 
@@ -31,6 +31,13 @@ function greyRockPalette(colors) {
 function smooth01(t) {
   t = clamp01(t);
   return t * t * (3 - 2 * t);
+}
+
+function randomDir(random) {
+  const z = random.range(0, 1) * 2 - 1;
+  const t = random.range(0, Math.PI * 2);
+  const r = Math.sqrt(Math.max(0, 1 - z * z));
+  return { x: r * Math.cos(t), y: r * Math.sin(t), z };
 }
 
 function terrainPalette(colors, oceans) {
@@ -334,7 +341,7 @@ export function generateAsteroid(params) {
   const shape = new Perlin(0.55, 2.05, 0.42, 3, seed + 2, QualityMode.Low);
   const fine = new Perlin(4.2, 2.0, 0.32, 2, seed + 6, QualityMode.Low);
   const patch = new Perlin(0.62, 2.1, 0.48, 3, seed + 9, QualityMode.Low);
-  const speckle = new Perlin(11.2, 2.0, 0.28, 2, seed + 11, QualityMode.Low);
+  const warp = new Perlin(1.05, 2.0, 0.4, 3, seed + 11, QualityMode.Low);
   const random = new SS_Random(seed);
   const cx = size / 2;
   const cy = size / 2;
@@ -353,6 +360,34 @@ export function generateAsteroid(params) {
   const craters = makeCraters(random, 4 + random.range(0, 5), baseR * 0.92);
   const ore = mineralColor || Color.yellow;
   const palette = greyRockPalette(colors);
+  const mineralStyle = random.range(0, 1) > 0.48 ? "vein" : "deposit";
+  const deposits = [];
+  if (minerals && mineralStyle === "deposit") {
+    const count = 1 + (random.range(0, 2) | 0);
+    for (let i = 0; i < count; i++) {
+      const dir = randomDir(random);
+      let x = dir.x;
+      let y = dir.y;
+      let z = Math.max(0.2, Math.abs(dir.z));
+      const len = Math.hypot(x, y, z) || 1;
+      deposits.push({
+        x: x / len,
+        y: y / len,
+        z: z / len,
+        r: 0.22 + random.range(0, 0.26),
+      });
+    }
+  }
+  const veins = [];
+  if (minerals && mineralStyle === "vein") {
+    const count = 2 + (random.range(0, 2) | 0);
+    for (let i = 0; i < count; i++) {
+      veins.push({
+        ...randomDir(random),
+        half: 0.028 + random.range(0, 0.038),
+      });
+    }
+  }
   const tex = new SpriteTexture(size, size);
 
   function localXY(x, y) {
@@ -398,19 +433,47 @@ export function generateAsteroid(params) {
       albedo = mixColor(albedo, mixColor(albedo, Color.white, 0.22), clamp01(c0 * 0.5));
       let mineralHit = 0;
       if (minerals) {
-        const pocket = n01(patch, sph.nx * 1.85, sph.ny * 1.85, sph.nz * 1.85 + 1.8);
-        const fleck = n01(speckle, sph.nx * 13.5, sph.ny * 13.5, sph.nz * 13.5);
-        if (pocket > 0.46 && fleck > 0.835) {
-          mineralHit = clamp01((fleck - 0.835) / 0.14);
-          albedo = mixColor(albedo, ore, 0.68 + mineralHit * 0.28);
+        const wx = sph.nx + (n01(warp, sph.nx * 1.4, sph.ny * 1.4, sph.nz * 1.4) - 0.5) * 0.38;
+        const wy = sph.ny + (n01(warp, sph.ny * 1.4, sph.nz * 1.4, sph.nx * 1.4 + 2) - 0.5) * 0.38;
+        const wz = sph.nz + (n01(warp, sph.nz * 1.4, sph.nx * 1.4, sph.ny * 1.4 + 4) - 0.5) * 0.38;
+        if (mineralStyle === "deposit") {
+          for (let i = 0; i < deposits.length; i++) {
+            const d = deposits[i];
+            const dot = clamp(wx * d.x + wy * d.y + wz * d.z, -1, 1);
+            const ang = Math.acos(dot);
+            const edge = d.r * (0.82 + n01(patch, wx * 3.2, wy * 3.2, wz * 3.2) * 0.4);
+            if (ang < edge) {
+              const u = 1 - ang / edge;
+              mineralHit = Math.max(mineralHit, smooth01(u));
+            }
+          }
+        } else {
+          for (let i = 0; i < veins.length; i++) {
+            const v = veins[i];
+            const distN = Math.abs(wx * v.x + wy * v.y + wz * v.z);
+            const half = v.half * (0.75 + n01(patch, wx * 4.2, wy * 4.2, wz * 4.2) * 0.7);
+            if (distN < half) {
+              mineralHit = Math.max(mineralHit, smooth01(1 - distN / half));
+            }
+          }
+        }
+        if (mineralHit > 0.04) {
+          const mot = n01(fine, wx * 7.5, wy * 7.5, wz * 7.5);
+          if (mineralStyle === "deposit") {
+            const amt = mineralHit * (0.34 + mot * 0.4);
+            albedo = mixColor(albedo, ore, amt);
+            albedo = mixColor(albedo, mixColor(ore, Color.black, 0.4), (1 - mineralHit) * mineralHit * 1.4);
+          } else {
+            albedo = mixColor(albedo, ore, (0.48 + mineralHit * 0.42) * (0.78 + mot * 0.22));
+          }
         }
       }
       albedo.a = 1;
 
       const n = perturbNormal(
         sph,
-        h0 * 0.16 + grain * 0.04 + (c0 - cdx),
-        h0 * 0.16 + (c0 - cdy),
+        h0 * 0.16 + grain * 0.04 + (c0 - cdx) - mineralHit * (mineralStyle === "deposit" ? 0.16 : 0.06),
+        h0 * 0.16 + (c0 - cdy) - mineralHit * (mineralStyle === "deposit" ? 0.16 : 0.06),
         1.0
       );
       const ndl = n.nx * light.x + n.ny * light.y + n.nz * light.z;

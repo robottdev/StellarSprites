@@ -1,12 +1,12 @@
 import {
   Color, SpriteTexture, SS_Random, clamp, mixColor, overColor,
   hsvToRgb, unityRandomInt,
-} from "./core.js?v=a14";
+} from "./core.js?v=a15";
 import {
   generatePlanet, generateSun, generateMoon, generateAsteroid, generateBlackhole,
   generateBackground, PlanetType,
-} from "./celestial.js?v=a14";
-import { generateShip, generateStation } from "./craft.js?v=a14";
+} from "./celestial.js?v=a15";
+import { generateShip, generateStation } from "./craft.js?v=a15";
 
 const STAR_PALETTE = [
   new Color(1, 0.92, 0.55, 1),
