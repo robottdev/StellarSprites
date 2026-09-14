@@ -47,12 +47,12 @@ function bodyName(random, prefix) {
 function qualitySizes(quality) {
   if (quality < 0.5) {
     return {
-      sun: 48, planet: 32, moon: 24, asteroid: 24, station: 48,
+      sun: 48, planet: 32, moon: 24, asteroid: 48, station: 48,
       ship: 64, bg: 64, map: 256, hole: 64,
     };
   }
   return {
-    sun: 192, planet: 96, moon: 56, asteroid: 40, station: 128,
+    sun: 192, planet: 96, moon: 56, asteroid: 96, station: 128,
     ship: 128, bg: 256, map: 512, hole: 256,
   };
 }
@@ -216,7 +216,10 @@ export function generateSolarSystem(params) {
   if (includeBelt && beltOuter > beltInner) {
     const unique = quality < 0.5 ? 2 : 4;
     for (let a = 0; a < unique; a++) {
-      const aColors = paletteFromSeed(seed + 800 + a * 9);
+      const aColors = paletteFromSeed(seed + 800 + a * 9).map((c, i) => {
+        const grey = 0.36 + i * 0.14;
+        return mixColor(new Color(grey, grey * 0.97, grey * 0.92), c, 0.18);
+      });
       const aTex = generateAsteroid({
         seed: seed + 800 + a * 9,
         size: sizes.asteroid,

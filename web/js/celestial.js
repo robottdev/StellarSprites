@@ -313,68 +313,93 @@ export function generateMoon(params) {
 
 export function generateAsteroid(params) {
   const { seed, size, colors, minerals, mineralColor, lightAngle } = params;
-  const rock = new Perlin(2.45, 2.15, 0.5, 5, seed, QualityMode.Medium);
-  const ridge = new RidgedMultifractal(2.85, 2.0, 4, seed + 2, QualityMode.Low);
-  const mineralNoise = new Voronoi(3.4, 1.0, seed + 1, true);
+  const rock = new Perlin(1.7, 2.0, 0.48, 4, seed, QualityMode.Medium);
+  const shape = new Perlin(0.78, 2.05, 0.46, 3, seed + 2, QualityMode.Low);
+  const fine = new Perlin(6.4, 2.0, 0.36, 3, seed + 6, QualityMode.Low);
+  const patch = new Perlin(1.05, 2.1, 0.5, 3, seed + 9, QualityMode.Low);
   const random = new SS_Random(seed);
   const cx = size / 2;
   const cy = size / 2;
-  const rx = size * (0.37 + random.range(0, 0.07));
-  const ry = size * (0.22 + random.range(0, 0.1));
-  const rot = random.range(-0.7, 0.7);
+  const baseR = size * 0.40;
+  const squash = 0.78 + random.range(0, 0.16);
+  const rot = random.range(-0.9, 0.9);
   const cosR = Math.cos(rot);
   const sinR = Math.sin(rot);
-  const light = makeLight(lightAngle, 0.4);
-  const craters = makeCraters(random, 7 + random.range(0, 7), Math.min(rx, ry));
+  const lobeN = 2 + (random.range(0, 2) | 0);
+  const lobeAmp = 0.07 + random.range(0, 0.07);
+  const lobePhase = random.range(0, Math.PI * 2);
+  const dentAmp = 0.09 + random.range(0, 0.08);
+  const light = makeLight(lightAngle, 0.5);
+  const craters = makeCraters(random, 5 + random.range(0, 6), baseR * 0.9);
   const palette = [
-    mixColor(colors[0], Color.black, 0.32),
+    mixColor(colors[0], Color.black, 0.4),
     colors[0],
     colors[1] || colors[0],
-    colors[2] || colors[1] || colors[0],
+    mixColor(colors[2] || colors[1] || colors[0], Color.white, 0.14),
   ];
   const tex = new SpriteTexture(size, size);
 
+  function localXY(x, y) {
+    const ox = x - cx;
+    const oy = y - cy;
+    return {
+      lx: ox * cosR - oy * sinR,
+      ly: (ox * sinR + oy * cosR) / squash,
+    };
+  }
+
+  function radiusAt(lx, ly) {
+    const ang = Math.atan2(ly, lx);
+    const n = n01(shape, Math.cos(ang) * 1.05, Math.sin(ang) * 1.05, 0.15);
+    const lobe = Math.sin(ang * lobeN + lobePhase) * lobeAmp;
+    const dent = (n - 0.5) * 2 * dentAmp;
+    return baseR * (1 + lobe + dent);
+  }
+
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const ox = x - cx;
-      const oy = y - cy;
-      const lx = ox * cosR - oy * sinR;
-      const ly = ox * sinR + oy * cosR;
-      const nx0 = lx / rx;
-      const ny0 = ly / ry;
-      const r2 = nx0 * nx0 + ny0 * ny0;
-      const edge = (n01(rock, nx0 * 3.2, ny0 * 3.2, 0) - 0.5) * 0.42;
-      const er = 1 + edge;
-      if (r2 >= er) continue;
-      const nz = Math.sqrt(Math.max(0, 1 - Math.min(0.999, r2 / er)));
-      const sph = { nx: nx0 / Math.sqrt(er), ny: ny0 / Math.sqrt(er), nz, r2 };
+      const { lx, ly } = localXY(x, y);
+      const dist = Math.hypot(lx, ly);
+      const rad = radiusAt(lx, ly);
+      const nx = lx / rad;
+      const ny = ly / rad;
+      const r2 = nx * nx + ny * ny;
+      if (r2 >= 1) continue;
+      const sph = { nx, ny, nz: Math.sqrt(Math.max(0, 1 - r2)), r2 };
 
-      const h = n01(rock, sph.nx * 4.2, sph.ny * 4.2, sph.nz * 4.2);
-      const rid = clamp01((ridge.getValue(sph.nx * 5.2, sph.ny * 5.2, sph.nz * 5.2) + 1) * 0.5);
+      const h0 = n01(rock, sph.nx * 2.35, sph.ny * 2.35, sph.nz * 2.35);
+      const grain = n01(fine, sph.nx * 9.5, sph.ny * 9.5, sph.nz * 9.5);
+      const mareN = n01(patch, sph.nx * 1.2, sph.ny * 1.2, sph.nz * 1.2);
       const c0 = craterHeight(lx, ly, craters);
-      let albedo = sampleStops(palette, clamp01(h * 0.5 + rid * 0.4));
-      albedo = mixColor(albedo, mixColor(albedo, Color.black, 0.5), clamp01(-c0));
-      albedo = mixColor(albedo, mixColor(albedo, Color.white, 0.2), clamp01(c0 * 0.4));
-
+      const cdx = craterHeight(lx + 1, ly, craters);
+      const cdy = craterHeight(lx, ly + 1, craters);
+      let albedo = sampleStops(palette, clamp01(h0 * 0.58 + grain * 0.14 + 0.12));
+      if (mareN > 0.6) {
+        albedo = mixColor(albedo, mixColor(colors[0], Color.black, 0.34), clamp01((mareN - 0.6) * 1.7));
+      }
+      albedo = mixColor(albedo, mixColor(albedo, Color.black, 0.45), clamp01(-c0 * 0.85));
+      albedo = mixColor(albedo, mixColor(albedo, Color.white, 0.22), clamp01(c0 * 0.5));
       if (minerals) {
-        const m = clamp01((mineralNoise.getValue(lx * 0.14, ly * 0.14, 0) + 1) * 0.5);
-        const vein = rid > 0.6 && m > 0.48;
-        if (vein || m > 0.76) {
-          const amt = vein ? 0.5 + (m - 0.48) * 0.55 : (m - 0.76) * 3.2;
-          albedo = mixColor(albedo, mineralColor, clamp01(amt));
+        const m = n01(patch, sph.nx * 1.55, sph.ny * 1.55, sph.nz * 1.55 + 2);
+        if (m > 0.74) {
+          albedo = mixColor(albedo, mineralColor, clamp01((m - 0.74) * 1.35) * 0.38);
         }
       }
       albedo.a = 1;
 
+      const shapeDx = (radiusAt(lx - 1, ly) - radiusAt(lx + 1, ly)) / Math.max(8, rad) * 0.9;
+      const shapeDy = (radiusAt(lx, ly - 1) - radiusAt(lx, ly + 1)) / Math.max(8, rad) * 0.9;
       const n = perturbNormal(
         sph,
-        (h - 0.5) * 0.85 + (c0 - craterHeight(lx + 1, ly, craters)),
-        (h - 0.5) * 0.85 + (c0 - craterHeight(lx, ly + 1, craters)),
-        1.15
+        h0 * 0.18 + grain * 0.08 + (c0 - cdx) + shapeDx,
+        h0 * 0.18 + (c0 - cdy) + shapeDy,
+        1.0
       );
-      const shine = minerals ? specular(n, light, 36, 0.28) : specular(n, light, 80, 0.05);
-      const pixel = shadeRgb(albedo, lambert(n, light, 0.05, 0.08), rimLight(n, light, 2.6) * 0.16, shine);
-      pixel.a = smooth01((er - r2) / 0.08);
+      const ndl = n.nx * light.x + n.ny * light.y + n.nz * light.z;
+      const earthshine = 0.05 * clamp01(0.35 - ndl);
+      const shine = minerals ? specular(n, light, 70, 0.08) : specular(n, light, 110, 0.045);
+      const pixel = shadeRgb(albedo, lambert(n, light, 0.04, 0.1) + earthshine, rimLight(n, light, 3.1) * 0.16, shine);
+      pixel.a = diskCoverage(dist, rad);
       tex.setPixel(x, y, pixel);
     }
   }
@@ -594,8 +619,14 @@ export function randomizeAsteroid(state) {
   if (!next.customSeed) next.seed = unityRandomInt(0, 100000000);
   if (!next.customSize) next.size = pick(next.availableSizes);
   if (!next.customScale) next.scale = unityRandomFloat(1, 2);
-  if (!next.customColors) next.colors = generateColorWheelColors(next.seed, 3);
-  if (!next.customMinerals) next.minerals = unityRandomInt(0, 2) > 0;
+  if (!next.customColors) {
+    const raw = generateColorWheelColors(next.seed, 3);
+    next.colors = raw.map((c, i) => {
+      const grey = 0.34 + i * 0.15;
+      return mixColor(new Color(grey, grey * 0.97, grey * 0.92), c, 0.2);
+    });
+  }
+  if (!next.customMinerals) next.minerals = unityRandomInt(0, 5) > 2;
   if (!next.customMineralColor) next.mineralColor = pick(next.availableMineralColors);
   return next;
 }
