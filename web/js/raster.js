@@ -1,4 +1,4 @@
-import { Color } from "./core.js?v=a14";
+import { Color } from "./core.js?v=a15";
 
 function point(x, y) {
   return { x, y };

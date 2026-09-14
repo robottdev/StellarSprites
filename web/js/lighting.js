@@ -1,4 +1,4 @@
-import { Color, clamp, clamp01, mixColor, overColor, smoothstep } from "./core.js?v=a14";
+import { Color, clamp, clamp01, mixColor, overColor, smoothstep } from "./core.js?v=a15";
 
 export function n01(module, x, y, z = 0) {
   return clamp01((module.getValue(x, y, z) + 1) * 0.5);
